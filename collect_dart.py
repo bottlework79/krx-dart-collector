@@ -99,7 +99,8 @@ def main():
     selected=tickers[start:start+args.batch_size]
     if not selected:raise SystemExit("Empty batch")
     db=load()
-    if db and not args.universe_file:raise SystemExit("Explicit ticker universe required")
+    outside={key[0] for key in db if not isinstance(key,tuple) or len(key)!=3 or key[0] not in tickers}
+    if outside:raise SystemExit("Cached DB contains records outside selected KRX universe; refusing to mix datasets")
     today=dt.date.today()
     tasks=[]
     cached=0
