@@ -95,10 +95,12 @@ def main():
             raise SystemExit("Invalid public ticker universe file")
         tickers=sorted(set(allowed)&set(mapping))
     else:
-        tickers=sorted(mapping)
+        raise SystemExit("KRX universe snapshot required; refusing unbounded DART collection")
     start=args.batch_index*args.batch_size
     selected=tickers[start:start+args.batch_size]
     if not selected:raise SystemExit("Empty batch")
+    if not args.universe_file or not Path(args.universe_file).exists():
+        raise SystemExit("Missing KRX universe file; do not collect full DART universe")
     db=load()
     if MISSING.exists():
         missing=set(tuple(x) for x in json.loads(MISSING.read_text(encoding="utf-8")))
