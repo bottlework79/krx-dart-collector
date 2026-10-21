@@ -1,0 +1,42 @@
+name: Pilot DART Financial Collection
+on:
+  workflow_dispatch:
+    inputs:
+      batch_index:
+        description: "Zero-based DART company batch"
+        required: true
+        default: "0"
+      batch_size:
+        description: "Companies (1-5 during pilot)"
+        required: true
+        default: "2"
+permissions:
+  contents: read
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DART_API_KEY: ${{ secrets.DART_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Collect small pilot in public runner
+        env:
+          BATCH_INDEX: ${{ inputs.batch_index }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+        run: |
+          if [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 5 ]; then
+            echo "Pilot limited to 1-5 companies"; exit 1
+          fi
+          python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
+      - name: Upload pilot for private inspection only
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: dart-financial-pilot-${{ github.run_id }}
+          path: data/financial_statements.pkl.gz
+          retention-days: 1
