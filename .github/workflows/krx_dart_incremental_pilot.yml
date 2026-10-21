@@ -6,6 +6,10 @@ on:
         description: "Zero-based KRX batch index"
         required: true
         default: "0"
+      auto_next:
+        description: "Automatically select first incomplete batch (recommended)"
+        type: boolean
+        default: true
       batch_size:
         description: "Companies per batch (1-25)"
         required: true
@@ -43,16 +47,22 @@ jobs:
           fi
       - name: Check Python syntax and missing-cache contract
         run: |
-          python -m py_compile collect_dart.py validate_financial_db.py
+          python -m py_compile collect_dart.py validate_financial_db.py select_next_batch.py
           python tests/test_missing_cache_static.py
       - name: Collect KRX universe pilot
         env:
           BATCH_INDEX: ${{ inputs.batch_index }}
           BATCH_SIZE: ${{ inputs.batch_size }}
+          AUTO_NEXT: ${{ inputs.auto_next }}
         run: |
           if [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
             echo "Batch limited to 1-25 companies"; exit 1
           fi
+          if [ "$AUTO_NEXT" = "true" ]; then
+            python select_next_batch.py --batch-size "$BATCH_SIZE" | tee /tmp/next_dart_batch.log
+            BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/next_dart_batch.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
+          fi
+          echo "COLLECTING_BATCH_INDEX=$BATCH_INDEX"
           python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
           python validate_financial_db.py
       - name: Save incremental checkpoint cache
