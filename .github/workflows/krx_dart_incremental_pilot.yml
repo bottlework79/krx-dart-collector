@@ -30,7 +30,9 @@ jobs:
       - name: Restore most recent financial DB checkpoint
         uses: actions/cache/restore@v4
         with:
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           key: public-dart-financial-v1-${{ github.run_id }}
           restore-keys: |
             public-dart-financial-v1-
@@ -53,12 +55,16 @@ jobs:
         if: success()
         uses: actions/cache/save@v4
         with:
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           key: public-dart-financial-v1-${{ github.run_id }}
       - name: Upload checkpoint artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: krx-dart-checkpoint-${{ github.run_id }}
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           retention-days: 30
