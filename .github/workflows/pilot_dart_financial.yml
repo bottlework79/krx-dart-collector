@@ -27,7 +27,9 @@ jobs:
       - name: Restore temporary collection cache
         uses: actions/cache/restore@v4
         with:
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           key: dart-pilot-krx-v1-${{ github.run_id }}
           restore-keys: |
             dart-pilot-krx-v1-
@@ -47,12 +49,16 @@ jobs:
         if: success()
         uses: actions/cache/save@v4
         with:
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           key: dart-pilot-krx-v1-${{ github.run_id }}
       - name: Upload pilot for private inspection only
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dart-financial-pilot-${{ github.run_id }}
-          path: data/financial_statements.pkl.gz
+          path: |
+            data/financial_statements.pkl.gz
+            data/unavailable_periods.json
           retention-days: 1
