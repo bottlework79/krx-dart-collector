@@ -104,8 +104,9 @@ def main():
         missing=set(tuple(x) for x in json.loads(MISSING.read_text(encoding="utf-8")))
     else:
         missing=set()
-    outside={str(item) for item in db if not isinstance(item,tuple) or len(item)!=3 or item[0] not in tickers}
+    outside=[item for item in db if not isinstance(item,tuple) or len(item)!=3 or item[0] not in tickers]
     if outside:raise SystemExit("Cached DB contains records outside selected KRX universe; refusing to mix datasets")
+    missing={item for item in missing if len(item)==3 and item[0] in tickers}
     today=dt.date.today()
     tasks=[]
     cached=0
