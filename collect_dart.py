@@ -80,7 +80,7 @@ def main():
     p.add_argument("--workers",type=int,default=2)
     p.add_argument("--start-year",type=int,default=2021)
     p.add_argument("--end-year",type=int,default=dt.date.today().year)
-    p.add_argument("--universe-file",default="")
+    p.add_argument("--universe-file",default="data/krx_universe.json")
     args=p.parse_args()
     if args.batch_index<0 or not 1<=args.batch_size<=25 or not 1<=args.workers<=3:
         raise SystemExit("Invalid batch/workers")
@@ -99,6 +99,7 @@ def main():
     selected=tickers[start:start+args.batch_size]
     if not selected:raise SystemExit("Empty batch")
     db=load()
+    if db and not args.universe_file:raise SystemExit("Explicit ticker universe required")
     today=dt.date.today()
     tasks=[]
     cached=0
