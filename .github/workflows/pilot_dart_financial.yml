@@ -45,6 +45,9 @@ jobs:
       - name: Validate KRX coverage and checksum
         if: success()
         run: python validate_collector_db.py
+      - name: Build checksum manifest for handoff
+        if: success()
+        run: python build_manifest.py
       - name: Save temporary collection cache
         if: success()
         uses: actions/cache/save@v4
@@ -61,4 +64,5 @@ jobs:
           path: |
             data/financial_statements.pkl.gz
             data/unavailable_periods.json
+            data/financial_manifest.json
           retention-days: 1
