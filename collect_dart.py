@@ -82,10 +82,12 @@ def main():
     p.add_argument("--start-year",type=int,default=2021)
     p.add_argument("--end-year",type=int,default=dt.date.today().year)
     p.add_argument("--universe-file",default="data/krx_universe.json")
+    p.add_argument("--missing-recheck-days",type=int,default=7)
     args=p.parse_args()
     if args.batch_index<0 or not 1<=args.batch_size<=25 or not 1<=args.workers<=3:
         raise SystemExit("Invalid batch/workers")
     if args.start_year>args.end_year:raise SystemExit("Invalid year range")
+    if not 1<=args.missing_recheck_days<=90:raise SystemExit("Invalid missing recheck days")
     key=os.environ.get("DART_API_KEY")
     if not key:raise SystemExit("Missing DART_API_KEY")
     mapping=companies(key)
@@ -106,12 +108,18 @@ def main():
         raise SystemExit("Missing KRX universe file; do not collect full DART universe")
     db=load()
     if MISSING.exists():
-        missing=set(tuple(x) for x in json.loads(MISSING.read_text(encoding="utf-8")))
+        raw_missing=json.loads(MISSING.read_text(encoding="utf-8"))
+        if isinstance(raw_missing,list):
+            missing={tuple(x):"1970-01-01" for x in raw_missing}
+        elif isinstance(raw_missing,dict):
+            missing={tuple(k.split("|")):v for k,v in raw_missing.items()}
+            missing={(k[0],int(k[1]),k[2]):v for k,v in missing.items()}
+        else:raise SystemExit("Invalid missing-period cache")
     else:
-        missing=set()
+        missing={}
     outside=[item for item in db if not isinstance(item,tuple) or len(item)!=3 or item[0] not in tickers]
     if outside:raise SystemExit("Cached DB contains records outside selected KRX universe; refusing to mix datasets")
-    missing={item for item in missing if len(item)==3 and item[0] in tickers}
+    missing={item:date for item,date in missing.items() if len(item)==3 and item[0] in tickers}
     today=dt.date.today()
     tasks=[]
     cached=0
@@ -123,7 +131,7 @@ def main():
                     continue
                 item=(code,year,report)
                 if item in db:cached+=1
-                elif item in missing and year<today.year:unavailable_cached+=1
+                elif item in missing and (year<today.year or (today-dt.date.fromisoformat(missing[item])).days<args.missing_recheck_days):unavailable_cached+=1
                 else:tasks.append(item)
     stats={"selected":selected,"batch_index":args.batch_index,"batch_size":args.batch_size,
            "eligible":len(tickers),"cached":cached,"unavailable_cached":unavailable_cached,"downloaded":0,"unavailable":0,"errors":0}
@@ -141,7 +149,7 @@ def main():
                     stats["downloaded"]+=1
                 elif status=="unavailable":
                     stats["unavailable"]+=1
-                    if year<today.year:missing.add((code,year,report))
+                    missing[(code,year,report)]=today.isoformat()
                 else:
                     stats["errors"]+=1
                     print("DART_COLLECT_ERROR",code,year,report,status)
@@ -149,7 +157,7 @@ def main():
                 stats["errors"]+=1
                 print("DART_COLLECT_ERROR",code,year,report,type(exc).__name__)
     save(db)
-    MISSING.write_text(json.dumps(sorted([list(x) for x in missing]),ensure_ascii=False),encoding="utf-8")
+    MISSING.write_text(json.dumps({"|".join(map(str,k)):v for k,v in sorted(missing.items())},ensure_ascii=False,sort_keys=True),encoding="utf-8")
     stats["stored"]=len(db)
     stats["compressed_bytes"]=DB.stat().st_size
     print("PUBLIC_DART_BATCH="+json.dumps(stats,ensure_ascii=False))
