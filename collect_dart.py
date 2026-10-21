@@ -9,6 +9,7 @@ import os
 import pickle
 import tempfile
 import time
+import threading
 import zipfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -21,6 +22,7 @@ DB=ROOT/"financial_statements.pkl.gz"
 MISSING=ROOT/"unavailable_periods.json"
 REPORTS={"annual":"11011","q1":"11013","half":"11012","q3":"11014"}
 API="https://opendart.fss.or.kr/api/"
+THREAD_LOCAL=threading.local()
 
 def session():
     s=requests.Session()
@@ -29,6 +31,11 @@ def session():
                 allowed_methods=frozenset(["GET"]),respect_retry_after_header=True)
     s.mount("https://",HTTPAdapter(max_retries=retry))
     return s
+
+def worker_session():
+    if not hasattr(THREAD_LOCAL,"session"):
+        THREAD_LOCAL.session=session()
+    return THREAD_LOCAL.session
 
 def companies(key):
     with session() as s:
@@ -63,16 +70,21 @@ def save(db):
         path.unlink(missing_ok=True)
 
 def request(key,corp,year,report):
-    with session() as s:
+    started=time.monotonic()
+    s=worker_session()
+    try:
         r=s.get(API+"fnlttSinglAcntAll.json",params={
             "crtfc_key":key,"corp_code":corp,"bsns_year":year,
-            "reprt_code":REPORTS[report],"fs_div":"CFS"},timeout=45)
+            "reprt_code":REPORTS[report],"fs_div":"CFS"},timeout=(10,30))
         r.raise_for_status()
         payload=r.json()
+    except Exception:
+        print("DART_REQUEST_FAILURE="+json.dumps({"ticker_corp":corp,"year":year,"report":report,"seconds":round(time.monotonic()-started,2)}),flush=True)
+        raise
     status=payload.get("status")
-    if status=="013":return "unavailable",[]
-    if status!="000":return "api_"+str(status),[]
-    return "ok",payload.get("list",[])
+    result=("unavailable",[]) if status=="013" else (("api_"+str(status),[]) if status!="000" else ("ok",payload.get("list",[])))
+    print("DART_REQUEST_TIMING="+json.dumps({"year":year,"report":report,"seconds":round(time.monotonic()-started,2),"status":result[0]}),flush=True)
+    return result
 
 def main():
     p=argparse.ArgumentParser()
@@ -135,6 +147,8 @@ def main():
                 else:tasks.append(item)
     stats={"selected":selected,"batch_index":args.batch_index,"batch_size":args.batch_size,
            "eligible":len(tickers),"cached":cached,"unavailable_cached":unavailable_cached,"downloaded":0,"unavailable":0,"errors":0}
+    batch_started=time.monotonic()
+    completed=0
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         future_map={pool.submit(request,key,mapping[code]["corp_code"],year,report):(code,year,report)
                     for code,year,report in tasks}
@@ -156,6 +170,10 @@ def main():
             except (requests.RequestException,ValueError,OSError) as exc:
                 stats["errors"]+=1
                 print("DART_COLLECT_ERROR",code,year,report,type(exc).__name__)
+            completed+=1
+            if completed%20==0 or completed==len(tasks):
+                print("DART_PROGRESS="+json.dumps({"completed":completed,"total":len(tasks),"elapsed_seconds":round(time.monotonic()-batch_started,1)}),flush=True)
+    stats["elapsed_seconds"]=round(time.monotonic()-batch_started,1)
     save(db)
     MISSING.write_text(json.dumps({"|".join(map(str,k)):v for k,v in sorted(missing.items())},ensure_ascii=False,sort_keys=True),encoding="utf-8")
     stats["stored"]=len(db)
