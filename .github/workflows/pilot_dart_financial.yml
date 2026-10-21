@@ -49,7 +49,7 @@ jobs:
         if: success()
         run: python build_manifest.py
       - name: Save temporary collection cache
-        if: success()
+        if: always()
         uses: actions/cache/save@v4
         with:
           path: |
