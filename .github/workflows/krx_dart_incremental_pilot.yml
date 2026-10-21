@@ -41,6 +41,10 @@ jobs:
           if [ -f data/financial_statements.pkl.gz ]; then
             python validate_financial_db.py
           fi
+      - name: Check Python syntax and missing-cache contract
+        run: |
+          python -m py_compile collect_dart.py validate_financial_db.py
+          python tests/test_missing_cache_static.py
       - name: Collect KRX universe pilot
         env:
           BATCH_INDEX: ${{ inputs.batch_index }}
