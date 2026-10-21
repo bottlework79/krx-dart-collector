@@ -33,6 +33,15 @@ jobs:
           key: dart-pilot-krx-v1-${{ github.run_id }}
           restore-keys: |
             dart-pilot-krx-v1-
+      - name: Restore private durable checkpoint if authorized
+        env:
+          PRIVATE_DATA_TOKEN: ${{ secrets.PRIVATE_DATA_TOKEN }}
+        run: |
+          if [ -n "$PRIVATE_DATA_TOKEN" ]; then
+            python private_checkpoint.py download
+          else
+            echo "PRIVATE_CHECKPOINT=not_configured; temporary cache only"
+          fi
       - name: Collect small pilot in public runner
         env:
           BATCH_INDEX: ${{ inputs.batch_index }}
@@ -48,6 +57,16 @@ jobs:
       - name: Build checksum manifest for handoff
         if: success()
         run: python build_manifest.py
+      - name: Save validated private durable checkpoint if authorized
+        if: success()
+        env:
+          PRIVATE_DATA_TOKEN: ${{ secrets.PRIVATE_DATA_TOKEN }}
+        run: |
+          if [ -n "$PRIVATE_DATA_TOKEN" ]; then
+            python private_checkpoint.py upload
+          else
+            echo "PRIVATE_CHECKPOINT=not_configured; permanent storage not enabled"
+          fi
       - name: Save temporary collection cache
         if: always()
         uses: actions/cache/save@v4
@@ -56,13 +75,10 @@ jobs:
             data/financial_statements.pkl.gz
             data/unavailable_periods.json
           key: dart-pilot-krx-v1-${{ github.run_id }}
-      - name: Upload pilot for private inspection only
+      - name: Upload checksum manifest only
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dart-financial-pilot-${{ github.run_id }}
-          path: |
-            data/financial_statements.pkl.gz
-            data/unavailable_periods.json
-            data/financial_manifest.json
+          path: data/financial_manifest.json
           retention-days: 1
