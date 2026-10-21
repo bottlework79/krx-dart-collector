@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       batch_index:
-        description: "Zero-based KRX batch index"
+        description: "Zero-based KRX batch index (ignored when auto_next=true)"
         required: true
         default: "0"
       auto_next:
@@ -13,7 +13,7 @@ on:
       batch_size:
         description: "Companies per batch (1-25)"
         required: true
-        default: "2"
+        default: "25"
 permissions:
   contents: read
 concurrency:
