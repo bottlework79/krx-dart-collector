@@ -40,6 +40,9 @@ jobs:
             echo "Pilot limited to 1-5 companies"; exit 1
           fi
           python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
+      - name: Validate KRX coverage and checksum
+        if: success()
+        run: python validate_collector_db.py
       - name: Save temporary collection cache
         if: success()
         uses: actions/cache/save@v4
