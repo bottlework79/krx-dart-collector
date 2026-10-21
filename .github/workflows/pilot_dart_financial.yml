@@ -24,6 +24,13 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
+      - name: Restore temporary collection cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/financial_statements.pkl.gz
+          key: dart-pilot-krx-v1-${{ github.run_id }}
+          restore-keys: |
+            dart-pilot-krx-v1-
       - name: Collect small pilot in public runner
         env:
           BATCH_INDEX: ${{ inputs.batch_index }}
@@ -33,9 +40,15 @@ jobs:
             echo "Pilot limited to 1-5 companies"; exit 1
           fi
           python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
+      - name: Save temporary collection cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: data/financial_statements.pkl.gz
+          key: dart-pilot-krx-v1-${{ github.run_id }}
       - name: Upload pilot for private inspection only
         uses: actions/upload-artifact@v4
-        if: success()
+        if: always()
         with:
           name: dart-financial-pilot-${{ github.run_id }}
           path: data/financial_statements.pkl.gz
