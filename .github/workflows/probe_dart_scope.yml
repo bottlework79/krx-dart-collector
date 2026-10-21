@@ -1,0 +1,31 @@
+name: Probe Public DART Scope
+on:
+  workflow_dispatch:
+    inputs:
+      batch_index:
+        description: "Zero-based batch index"
+        required: true
+        default: "0"
+      batch_size:
+        description: "Number of companies (1-25)"
+        required: true
+        default: "2"
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      DART_API_KEY: ${{ secrets.DART_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Probe listed company universe without writing data
+        env:
+          BATCH_INDEX: ${{ inputs.batch_index }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+        run: python probe_dart_scope.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE"
