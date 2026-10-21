@@ -18,6 +18,7 @@ from urllib3.util.retry import Retry
 
 ROOT=Path("data")
 DB=ROOT/"financial_statements.pkl.gz"
+MISSING=ROOT/"unavailable_periods.json"
 REPORTS={"annual":"11011","q1":"11013","half":"11012","q3":"11014"}
 API="https://opendart.fss.or.kr/api/"
 
@@ -99,11 +100,16 @@ def main():
     selected=tickers[start:start+args.batch_size]
     if not selected:raise SystemExit("Empty batch")
     db=load()
+    if MISSING.exists():
+        missing=set(tuple(x) for x in json.loads(MISSING.read_text(encoding="utf-8")))
+    else:
+        missing=set()
     outside={str(item) for item in db if not isinstance(item,tuple) or len(item)!=3 or item[0] not in tickers}
     if outside:raise SystemExit("Cached DB contains records outside selected KRX universe; refusing to mix datasets")
     today=dt.date.today()
     tasks=[]
     cached=0
+    unavailable_cached=0
     for code in selected:
         for year in range(args.start_year,args.end_year+1):
             for report in REPORTS:
@@ -111,9 +117,10 @@ def main():
                     continue
                 item=(code,year,report)
                 if item in db:cached+=1
+                elif item in missing and year<today.year:unavailable_cached+=1
                 else:tasks.append(item)
     stats={"selected":selected,"batch_index":args.batch_index,"batch_size":args.batch_size,
-           "eligible":len(tickers),"cached":cached,"downloaded":0,"unavailable":0,"errors":0}
+           "eligible":len(tickers),"cached":cached,"unavailable_cached":unavailable_cached,"downloaded":0,"unavailable":0,"errors":0}
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         future_map={pool.submit(request,key,mapping[code]["corp_code"],year,report):(code,year,report)
                     for code,year,report in tasks}
@@ -126,7 +133,9 @@ def main():
                         "year":year,"report":report,"fs_div":"CFS","classification":"pending",
                         "collected_at":dt.datetime.now(dt.timezone.utc).isoformat(),"rows":rows}
                     stats["downloaded"]+=1
-                elif status=="unavailable":stats["unavailable"]+=1
+                elif status=="unavailable":
+                    stats["unavailable"]+=1
+                    if year<today.year:missing.add((code,year,report))
                 else:
                     stats["errors"]+=1
                     print("DART_COLLECT_ERROR",code,year,report,status)
@@ -134,6 +143,7 @@ def main():
                 stats["errors"]+=1
                 print("DART_COLLECT_ERROR",code,year,report,type(exc).__name__)
     save(db)
+    MISSING.write_text(json.dumps(sorted([list(x) for x in missing]),ensure_ascii=False),encoding="utf-8")
     stats["stored"]=len(db)
     stats["compressed_bytes"]=DB.stat().st_size
     print("PUBLIC_DART_BATCH="+json.dumps(stats,ensure_ascii=False))
