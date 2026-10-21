@@ -89,11 +89,14 @@ def main():
     key=os.environ.get("DART_API_KEY")
     if not key:raise SystemExit("Missing DART_API_KEY")
     mapping=companies(key)
+    if not args.universe_file or not Path(args.universe_file).is_file():
+        raise SystemExit("Required KRX universe snapshot missing")
     if args.universe_file:
         allowed=json.loads(Path(args.universe_file).read_text(encoding="utf-8"))
         if not isinstance(allowed,list) or not all(isinstance(x,str) and len(x)==6 and x.isdigit() for x in allowed):
             raise SystemExit("Invalid public ticker universe file")
         tickers=sorted(set(allowed)&set(mapping))
+        print("KRX_UNIVERSE_MATCH="+json.dumps({"snapshot":len(set(allowed)),"dart_matched":len(tickers),"unmatched":len(set(allowed)-set(mapping))}))
     else:
         raise SystemExit("KRX universe snapshot required; refusing unbounded DART collection")
     start=args.batch_index*args.batch_size
