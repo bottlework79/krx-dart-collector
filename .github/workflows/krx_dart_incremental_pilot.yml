@@ -7,7 +7,7 @@ on:
         required: true
         default: "0"
       batch_size:
-        description: "Companies in pilot (1-5)"
+        description: "Companies per batch (1-25)"
         required: true
         default: "2"
 permissions:
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     env:
       DART_API_KEY: ${{ secrets.DART_API_KEY }}
     steps:
@@ -50,8 +50,8 @@ jobs:
           BATCH_INDEX: ${{ inputs.batch_index }}
           BATCH_SIZE: ${{ inputs.batch_size }}
         run: |
-          if [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 5 ]; then
-            echo "Pilot limited to 1-5 companies"; exit 1
+          if [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
+            echo "Batch limited to 1-25 companies"; exit 1
           fi
           python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
           python validate_financial_db.py
