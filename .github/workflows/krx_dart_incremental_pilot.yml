@@ -36,10 +36,13 @@ jobs:
         with:
           path: |
             data/financial_statements.pkl.gz
+            data/dart_shards/
             data/unavailable_periods.json
           key: public-dart-financial-v1-${{ github.run_id }}
           restore-keys: |
             public-dart-financial-v1-
+      - name: Reconstruct DB from split cache if needed
+        run: python dart_checkpoint_shards.py restore
       - name: Validate restored DB
         run: |
           if [ -f data/financial_statements.pkl.gz ]; then
@@ -47,7 +50,7 @@ jobs:
           fi
       - name: Check Python syntax and missing-cache contract
         run: |
-          python -m py_compile collect_dart.py validate_financial_db.py select_next_batch.py
+          python -m py_compile collect_dart.py validate_financial_db.py select_next_batch.py dart_checkpoint_shards.py
           python tests/test_missing_cache_static.py
       - name: Collect KRX universe pilot
         env:
@@ -65,14 +68,25 @@ jobs:
           echo "COLLECTING_BATCH_INDEX=$BATCH_INDEX"
           python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
           python validate_financial_db.py
+      - name: Split validated DB for cache
+        if: success()
+        run: python dart_checkpoint_shards.py split
+      - name: Remove monolithic DB from cache staging
+        if: success()
+        run: |
+          mkdir -p /tmp/dart_checkpoint
+          cp data/financial_statements.pkl.gz /tmp/dart_checkpoint/financial_statements.pkl.gz
+          rm data/financial_statements.pkl.gz
       - name: Save incremental checkpoint cache
         if: success()
         uses: actions/cache/save@v4
         with:
           path: |
-            data/financial_statements.pkl.gz
             data/unavailable_periods.json
           key: public-dart-financial-v1-${{ github.run_id }}
+      - name: Restore combined DB for existing Private importer
+        if: success()
+        run: cp /tmp/dart_checkpoint/financial_statements.pkl.gz data/financial_statements.pkl.gz
       - name: Upload checkpoint artifact
         if: success()
         uses: actions/upload-artifact@v4
