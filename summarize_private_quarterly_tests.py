@@ -32,6 +32,13 @@ def main():
         category = last_line.split(":", 1)[0]
         if category in {"SyntaxError", "ImportError", "ModuleNotFoundError", "NameError", "TypeError", "ValueError", "AttributeError", "IndentationError"}:
             print("TEST_DIAGNOSTIC_ERROR_CATEGORY=" + category.upper())
+            if category == "ModuleNotFoundError":
+                import re
+                found = re.search(r"No module named [\x27\x22]([a-zA-Z0-9_.]+)[\x27\x22]", last_line)
+                if found:
+                    item = found.group(1)
+                    safe_known = {"operations.calculate_quarterly_parent_profit", "operations", "test_quarterly_parent_profit", "requests", "pandas"}
+                    print("TEST_DIAGNOSTIC_MODULE=" + (item if item in safe_known else "OTHER"))
     for source in ("operations/calculate_quarterly_parent_profit.py", "test/test_quarterly_parent_profit.py"):
         try:
             from pathlib import Path
