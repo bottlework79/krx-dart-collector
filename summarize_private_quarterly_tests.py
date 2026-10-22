@@ -27,6 +27,19 @@ def main():
     print("TEST_DIAGNOSTIC_FAIL_POSITIONS=" + ",".join(failed_indices))
     print("TEST_DIAGNOSTIC_TOTAL=" + str(len(cases)))
     print("TEST_DIAGNOSTIC_FAILED=" + str(len(problem_ids)))
+    for _, trace in result.errors:
+        last_line = trace.strip().splitlines()[-1]
+        category = last_line.split(":", 1)[0]
+        if category in {"SyntaxError", "ImportError", "ModuleNotFoundError", "NameError", "TypeError", "ValueError", "AttributeError", "IndentationError"}:
+            print("TEST_DIAGNOSTIC_ERROR_CATEGORY=" + category.upper())
+    for source in ("operations/calculate_quarterly_parent_profit.py", "test/test_quarterly_parent_profit.py"):
+        try:
+            from pathlib import Path
+            code = Path(source).read_text(encoding="utf-8")
+            compile(code, source, "exec")
+        except SyntaxError as exc:
+            print("TEST_DIAGNOSTIC_SYNTAX_LINE=" + str(exc.lineno))
+
 
 
 if __name__ == "__main__":
