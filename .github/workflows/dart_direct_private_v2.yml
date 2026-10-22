@@ -50,7 +50,7 @@ jobs:
           python select_history_batch.py --batch-size "$BATCH_SIZE" > /tmp/dart_v2_selection.log
           cat /tmp/dart_v2_selection.log
           BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/dart_v2_selection.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
-          python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
+          python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2 --history-file data/dart_collection_history.json
           python validate_financial_db.py
       - name: Merge fresh batch into Private v2
         working-directory: public
