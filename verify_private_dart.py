@@ -281,6 +281,39 @@ def print_financial_score_summary():
         "historical_backtest_ready"
     )):
         raise RuntimeError("Research score must not modify production data or rankings")
+    # Only predeclared factor names and nonnegative aggregate counts are public.
+    factor_names = {
+        "매출증가율": "REVENUE_GROWTH",
+        "영업이익증가율": "OPERATING_PROFIT_GROWTH",
+        "영업이익률": "OPERATING_MARGIN",
+        "ROE": "ROE",
+        "부채비율": "DEBT_RATIO",
+        "영업현금흐름/지배순이익": "OCF_TO_OWNER_PROFIT",
+        "영업이익률개선": "OPERATING_MARGIN_CHANGE",
+        "영업이익증가가속도": "OPERATING_PROFIT_ACCELERATION",
+    }
+    covered = data.get("factor_verified_companies")
+    neutral = data.get("factor_neutral_companies")
+    histogram = data.get("verified_weight_histogram")
+    if not isinstance(covered, dict) or not isinstance(neutral, dict):
+        raise RuntimeError("Missing financial score factor coverage")
+    if set(covered) != set(factor_names) or set(neutral) != set(factor_names):
+        raise RuntimeError("Unexpected financial score factors")
+    for name, label in factor_names.items():
+        v, n = covered[name], neutral[name]
+        if not safe_int(v) or not safe_int(n) or v + n != count:
+            raise RuntimeError("Financial factor coverage does not balance")
+        print(f"VERIFICATION_SCORE_FACTOR_{label}_COVERED={v}")
+    if not isinstance(histogram, dict):
+        raise RuntimeError("Missing score evidence distribution")
+    if any(not key.isascii() or not key.isdecimal()
+           or not 0 <= int(key) <= 85 or not safe_int(v)
+           for key, v in histogram.items()):
+        raise RuntimeError("Invalid score evidence histogram")
+    if sum(histogram.values()) != count:
+        raise RuntimeError("Score evidence histogram does not balance")
+    if sum(v for k, v in histogram.items() if int(k) >= 50) != scored:
+        raise RuntimeError("Score evidence histogram disagrees with scoring threshold")
     print(f"VERIFICATION_FINANCIAL_SCORE_COMPANIES={count}")
     print(f"VERIFICATION_FINANCIAL_SCORE_PROVISIONAL={scored}")
     print(f"VERIFICATION_FINANCIAL_SCORE_WITHHELD={withheld}")
