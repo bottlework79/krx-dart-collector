@@ -271,6 +271,32 @@ def run_private_phase(name, args):
         check=False,
     )
     if completed.returncode:
+        if name == "Original filing owner table parser tests":
+            import re
+            # Capture only known fixture test identifiers. Never print source
+            # traceback, amount, ticker, filing receipt or assertion diff.
+            diagnostic = subprocess.run(
+                (sys.executable, "-m", "unittest", "discover", "-s", "test",
+                 "-p", "test_original_dart_owner_table.py"),
+                cwd=PRIVATE, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=45, check=False,
+            )
+            allowed = {
+                "test_krw_row_exact_match_is_candidate_only",
+                "test_rounded_millions_do_not_equal_won",
+                "test_different_table_with_same_number_not_owner_candidate",
+                "test_comprehensive_or_minority_label_excluded",
+                "test_multiple_owner_rows_ambiguous",
+                "test_unknown_unit_is_not_approved",
+                "test_negative_parentheses",
+                "test_audit_preserves_no_auto_approval",
+            }
+            failures = sorted(set(
+                re.findall(r"(?:FAIL|ERROR): (test_[A-Za-z0-9_]+)", diagnostic.stderr.decode("utf-8", errors="replace"))
+            ) & allowed)
+            if failures:
+                print("PUBLIC_SAFE_FAILING_UNIT_TESTS=" + ",".join(failures), flush=True)
         raise RuntimeError(f"Private validation phase failed ({name}, exit {completed.returncode})")
     print(f"PASS: {name}", flush=True)
 
