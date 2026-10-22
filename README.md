@@ -4,14 +4,14 @@ This **public** repository runs DART collection and read-only financial-data
 verification. All persisted financial statements and private stock analysis
 stay in **private** `bottlework79/krx-stock-data`.
 
-## Active GitHub Actions (manual only)
+## Active GitHub Actions
 
 | Workflow | Purpose | Private DB writes |
 | --- | --- | --- |
 | `dart_direct_private_v2.yml` | Collect DART annual/quarterly JSON, check raw batch, merge into private `data/financial_statements_v2.pkl.gz`, commit private DB, then update public metadata ledger | Yes, only to the private repository |
 | `verify_private_dart.yml` | Check out the *already persisted* private DB and private validation code on a public GitHub-hosted runner, run the audits without exposing raw records or row-level amounts | No |
 
-Neither workflow has a push or schedule trigger. To run one: **Actions → select the workflow → Run workflow**.
+The collector is **manual only**. Verification runs automatically on pushes to its own runner script or workflow, and can also be launched manually from **Actions → select the workflow → Run workflow**. Public collection metadata updates do not trigger verification.
 
 ## Data flow
 
