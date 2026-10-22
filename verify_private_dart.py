@@ -291,6 +291,7 @@ def run_private_phase(name, args):
                 "test_unknown_unit_is_not_approved",
                 "test_negative_parentheses",
                 "test_audit_preserves_no_auto_approval",
+                "test_original_dart_owner_table",
             }
             failures = sorted(set(
                 re.findall(r"(?:FAIL|ERROR): (test_[A-Za-z0-9_]+)", diagnostic.stderr.decode("utf-8", errors="replace"))
