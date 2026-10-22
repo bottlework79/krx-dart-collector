@@ -1,8 +1,16 @@
 name: Verify Private DART Data (Public Runner)
 
-# Manual-only: no push, schedule, or PR trigger for full DB verification.
+# Public runners are free for standard hosted actions. Auto-run only when
+# this dedicated validation runner or its workflow changes; not on metadata
+# commits from the collector and never on untrusted pull requests.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/verify_private_dart.yml'
+      - 'verify_private_dart.py'
 
 permissions:
   contents: read
