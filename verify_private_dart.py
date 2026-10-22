@@ -196,6 +196,16 @@ def print_valuation_summary():
     yoy = info.get("yoy_calculable")
     if not safe_int(positive) or not safe_int(yoy) or positive > total or yoy > total:
         raise RuntimeError("Invalid TTM quality counts")
+    official = info.get("official_first_filings")
+    reconciled = info.get("verified_financial_versions")
+    metadata = info.get("official_metadata_periods")
+    if not all(safe_int(k) for k in (official, reconciled, metadata)):
+        raise RuntimeError("Invalid official filing-date count")
+    if reconciled > official or official > metadata:
+        raise RuntimeError("Invalid official filing evidence coverage")
+    print(f"VERIFICATION_OFFICIAL_FILING_METADATA={metadata}")
+    print(f"VERIFICATION_ORIGINAL_FILING_RECEIPTS={official}")
+    print(f"VERIFICATION_RECONCILED_FINANCIAL_VERSIONS={reconciled}")
     print(f"VERIFICATION_TTM_VALUATION_PERIODS={total}")
     print(f"VERIFICATION_TTM_POSITIVE_NET={positive}")
     print(f"VERIFICATION_TTM_YOY_CALCULATED={yoy}")
