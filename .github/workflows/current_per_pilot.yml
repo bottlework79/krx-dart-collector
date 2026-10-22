@@ -52,8 +52,11 @@ jobs:
               raise SystemExit("INVALID_QUOTE_DIAGNOSTICS")
           if diagnostics["attempted"] != sum(diagnostics[k] for k in allowed if k != "attempted"):
               raise SystemExit("UNBALANCED_QUOTE_DIAGNOSTICS")
-          for key in allowed:
-              print("CURRENT_PER_KRX_" + key.upper() + "=" + str(diagnostics[key]))
+          for key in allowed + ("fallback_empty", "fallback_exception", "fallback_ticker_absent"):
+              value = diagnostics.get(key)
+              if type(value) is not int or value < 0:
+                  raise SystemExit("INVALID_DIAGNOSTIC_COUNT")
+              print("CURRENT_PER_KRX_" + key.upper() + "=" + str(value))
           print("CURRENT_PER_CALCULATED=" + str(calculated))
           print("CURRENT_PER_MISSING_QUOTE=" + str(statuses.get("missing_current_market_cap", 0)))
           PY
