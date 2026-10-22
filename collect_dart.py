@@ -95,6 +95,7 @@ def main():
     p.add_argument("--end-year",type=int,default=dt.date.today().year)
     p.add_argument("--universe-file",default="data/krx_universe.json")
     p.add_argument("--missing-recheck-days",type=int,default=7)
+    p.add_argument("--history-file",default=None,help="Only skip records confirmed imported in Private")
     args=p.parse_args()
     if args.batch_index<0 or not 1<=args.batch_size<=25 or not 1<=args.workers<=3:
         raise SystemExit("Invalid batch/workers")
@@ -133,6 +134,14 @@ def main():
     if outside:raise SystemExit("Cached DB contains records outside selected KRX universe; refusing to mix datasets")
     missing={item:date for item,date in missing.items() if len(item)==3 and item[0] in tickers}
     today=dt.date.today()
+    history={}
+    if args.history_file:
+        history_path=Path(args.history_file)
+        if not history_path.is_file():raise SystemExit("History file missing; refusing to recollect blindly")
+        document=json.loads(history_path.read_text(encoding="utf-8"))
+        if document.get("schema_version")!=1 or not isinstance(document.get("entries"),dict):
+            raise SystemExit("Invalid history format")
+        history=document["entries"]
     tasks=[]
     cached=0
     unavailable_cached=0
@@ -142,7 +151,12 @@ def main():
                 if year==today.year and {"q1":3,"half":6,"q3":9,"annual":12}[report]>today.month:
                     continue
                 item=(code,year,report)
-                if item in db:cached+=1
+                entry=history.get(f"{code}|{year}|{report}",{})
+                if args.history_file and entry.get("status")=="imported":
+                    cached+=1
+                elif args.history_file and entry.get("status")=="unavailable" and (year<today.year or (today-dt.date.fromisoformat(entry["checked_at"])).days<args.missing_recheck_days):
+                    unavailable_cached+=1
+                elif item in db:cached+=1
                 elif item in missing and (year<today.year or (today-dt.date.fromisoformat(missing[item])).days<args.missing_recheck_days):unavailable_cached+=1
                 else:tasks.append(item)
     stats={"selected":selected,"batch_index":args.batch_index,"batch_size":args.batch_size,
