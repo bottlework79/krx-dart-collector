@@ -188,9 +188,13 @@ def print_valuation_summary():
         raise RuntimeError("Public verification must not load nonpublic quote evidence")
     if info.get("per_calculable_provisional") != 0:
         raise RuntimeError("Public verifier must withhold unevidenced PER")
+    positive = info.get("positive_verified_ttm")
+    yoy = info.get("yoy_calculable")
+    if not safe_int(positive) or not safe_int(yoy) or positive > total or yoy > total:
+        raise RuntimeError("Invalid TTM quality counts")
     print(f"VERIFICATION_TTM_VALUATION_PERIODS={total}")
-    print(f"VERIFICATION_TTM_POSITIVE_NET={info['positive_verified_ttm']}")
-    print(f"VERIFICATION_TTM_YOY_CALCULATED={info['yoy_calculable']}")
+    print(f"VERIFICATION_TTM_POSITIVE_NET={positive}")
+    print(f"VERIFICATION_TTM_YOY_CALCULATED={yoy}")
     print("VERIFICATION_TTM_PER_WITHOUT_PRICE_EVIDENCE=0")
 
 def run_private_phase(name, args):
