@@ -36,6 +36,18 @@ def main():
         if record.get("ticker")!=ticker or record.get("year")!=year or record.get("report")!=report or record.get("fs_div")!="CFS" or not isinstance(record.get("rows"),list):
             raise ValueError("Invalid statement contents")
         entries[f"{ticker}|{year}|{report}"]={"status":"imported"}
+    # Preserve unavailable checks from earlier batches; imported records always win.
+    if args.output.exists():
+        previous=json.loads(args.output.read_text(encoding="utf-8"))
+        if previous.get("schema_version")!=1 or not isinstance(previous.get("entries"),dict):
+            raise ValueError("Invalid previous history")
+        for key,value in previous["entries"].items():
+            parts=key.split("|")
+            if len(parts)!=3:continue
+            ticker,year,report=parts
+            if ticker in allowed and year.isdigit() and report in REPORTS and key not in entries and isinstance(value,dict) and value.get("status")=="unavailable":
+                dt.date.fromisoformat(value["checked_at"])
+                entries[key]={"status":"unavailable","checked_at":value["checked_at"]}
     if args.missing.exists():
         raw=json.loads(args.missing.read_text(encoding="utf-8"))
         if isinstance(raw,dict):
