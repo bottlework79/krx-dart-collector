@@ -38,7 +38,7 @@ def main():
                 if found:
                     item = found.group(1)
                     safe_known = {"operations.calculate_quarterly_parent_profit", "operations", "test_quarterly_parent_profit", "requests", "pandas"}
-                    print("TEST_DIAGNOSTIC_MODULE=" + (item if item in safe_known else "OTHER"))
+                    print("TEST_DIAGNOSTIC_MODULE=" + (item.upper() if item in safe_known else "OTHER"))
     for source in ("operations/calculate_quarterly_parent_profit.py", "test/test_quarterly_parent_profit.py"):
         try:
             from pathlib import Path
