@@ -48,6 +48,7 @@ STEPS = (
     ("Existing market cap integration regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_existing_market_cap_bridge.py")),  # Includes original-filing-only safety checks
     ("DART filing dates and receipts regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_dart_filing_evidence.py")),
     ("Original filing owner table parser tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_owner_table.py")),
+    ("Original filing isolated table context tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_table_context.py")),
     ("Original DART document parser offline tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_document.py")),
     ("Validate date-gated TTM valuation bridge", ("-m", "operations.calculate_verified_ttm_valuation")),
 )
