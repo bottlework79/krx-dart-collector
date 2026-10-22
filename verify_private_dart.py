@@ -25,6 +25,7 @@ QUARTERLY_SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_
 TRIAGE_SUMMARY = PRIVATE / "dart_results" / "quarterly_triage" / "quarterly_parent_review_summary.json"
 VALUATION_SUMMARY = PRIVATE / "dart_results" / "verified_valuation" / "verified_ttm_valuation_summary.json"
 FILING_EVIDENCE = PRIVATE / "data" / "dart_filing_evidence.json"
+FINANCIAL_SCORE_SUMMARY = PRIVATE / "dart_results" / "financial_score_pilot" / "financial_score_summary.json"
 
 # The commands intentionally call the existing reviewed PRIVATE repository
 # scripts: no raw data or private analysis logic is copied into this public repo.
@@ -53,6 +54,8 @@ STEPS = (
     ("Original filing isolated table context tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_table_context.py")),
     ("Original DART document parser offline tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_document.py")),
     ("Validate date-gated TTM valuation bridge", ("-m", "operations.calculate_verified_ttm_valuation")),
+    ("DART financial score pilot regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_dart_financial_score_pilot.py")),
+    ("Calculate read-only DART financial score pilot", ("-m", "operations.score_verified_dart_financials")),
 )
 
 # Only known, non-sensitive result categories are allowed in public logs.
@@ -261,6 +264,30 @@ def check_private_filing_evidence():
     print(f"VERIFICATION_DART_FILING_SIDECAR_ENTRIES={len(sidecar['entries'])}")
     print("VERIFICATION_FIRST_FILING_DOES_NOT_VALIDATE_HISTORICAL_VALUES=True")
 
+def print_financial_score_summary():
+    data = json.loads(FINANCIAL_SCORE_SUMMARY.read_text(encoding="utf-8"))
+    count = data.get("companies")
+    scored = data.get("provisional_scored")
+    withheld = data.get("withheld_insufficient_coverage")
+    if not all(safe_int(v) for v in (count, scored, withheld)):
+        raise RuntimeError("Invalid DART score aggregate counts")
+    if scored + withheld != count or data.get("total_weight") != 100:
+        raise RuntimeError("DART financial score aggregate does not balance")
+    if data.get("valuation_weight_neutral") != 15 or data.get("minimum_verified_weight_for_score") != 50:
+        raise RuntimeError("Unexpected research financial scoring definition")
+    if any(data.get(k) is not False for k in (
+        "price_db_modified", "financial_db_modified",
+        "existing_financial_score_modified", "technical_rank_modified",
+        "historical_backtest_ready"
+    )):
+        raise RuntimeError("Research score must not modify production data or rankings")
+    print(f"VERIFICATION_FINANCIAL_SCORE_COMPANIES={count}")
+    print(f"VERIFICATION_FINANCIAL_SCORE_PROVISIONAL={scored}")
+    print(f"VERIFICATION_FINANCIAL_SCORE_WITHHELD={withheld}")
+    print("VERIFICATION_FINANCIAL_VALUATION_NEUTRAL_WEIGHT=15")
+    print("VERIFICATION_TECHNICAL_RANKINGS_UNCHANGED=True")
+
+
 def run_private_phase(name, args):
     # Do NOT stream private stdout/stderr to a publicly visible job log.
     # A new public workflow run's logs and artifacts can be read by anyone.
@@ -337,6 +364,7 @@ def main():
     print_triage_summary()
     print_valuation_summary()
     check_private_filing_evidence()
+    print_financial_score_summary()
 
 
 if __name__ == "__main__":
