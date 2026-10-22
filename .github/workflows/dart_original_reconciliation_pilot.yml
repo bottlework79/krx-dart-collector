@@ -2,6 +2,9 @@ name: Original DART Financial Document Pilot
 
 # Read-only original document pilot, manual only after first successful smoke test.
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/dart_original_reconciliation_pilot.yml']
   workflow_dispatch:
     inputs:
       documents:
@@ -18,6 +21,7 @@ concurrency:
 
 jobs:
   audit:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Check original DART table recognition aggregate' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
