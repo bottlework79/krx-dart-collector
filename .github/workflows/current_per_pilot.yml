@@ -43,6 +43,14 @@ jobs:
               raise SystemExit("INVALID_STATUS_COUNTS")
           print("CURRENT_PER_PILOT=SUCCESS")
           print("CURRENT_PER_QUOTES_RECEIVED=" + str(quotes))
+          diagnostics = report.get("quote_diagnostics", {})
+          allowed = ("attempted", "empty", "no_positive_cap", "exception", "received")
+          if any(type(diagnostics.get(k)) is not int or diagnostics[k] < 0 for k in allowed):
+              raise SystemExit("INVALID_QUOTE_DIAGNOSTICS")
+          if diagnostics["attempted"] != sum(diagnostics[k] for k in allowed if k != "attempted"):
+              raise SystemExit("UNBALANCED_QUOTE_DIAGNOSTICS")
+          for key in allowed:
+              print("CURRENT_PER_KRX_" + key.upper() + "=" + str(diagnostics[key]))
           print("CURRENT_PER_CALCULATED=" + str(calculated))
           print("CURRENT_PER_MISSING_QUOTE=" + str(statuses.get("missing_current_market_cap", 0)))
           PY
