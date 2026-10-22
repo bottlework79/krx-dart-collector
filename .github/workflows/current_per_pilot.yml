@@ -27,4 +27,22 @@ jobs:
         working-directory: private
         run: |
           python -m operations.current_ttm_per_snapshot --current-caps --max-tickers 3 > /dev/null 2>&1
-          echo "CURRENT_PER_PILOT_FINISHED"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("dart_results/current_valuation/current_ttm_per_summary.json").read_text())
+          total = report.get("companies")
+          quotes = report.get("network_quote_candidates")
+          calculated = report.get("per_available")
+          statuses = report.get("by_status", {})
+          if not all(type(x) is int for x in (total, quotes, calculated)):
+              raise SystemExit("INVALID_AGGREGATE_SUMMARY")
+          if not (0 <= calculated <= quotes <= 3 and total >= 0):
+              raise SystemExit("INVALID_AGGREGATE_COUNTS")
+          if sum(statuses.values()) != total:
+              raise SystemExit("INVALID_STATUS_COUNTS")
+          print("CURRENT_PER_PILOT=SUCCESS")
+          print("CURRENT_PER_QUOTES_RECEIVED=" + str(quotes))
+          print("CURRENT_PER_CALCULATED=" + str(calculated))
+          print("CURRENT_PER_MISSING_QUOTE=" + str(statuses.get("missing_current_market_cap", 0)))
+          PY
