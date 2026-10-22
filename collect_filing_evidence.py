@@ -32,14 +32,14 @@ REPORT_FOR_MONTH = {("사업보고서", "12"): "annual",
                     ("분기보고서", "03"): "q1",
                     ("분기보고서", "09"): "q3"}
 TITLE = re.compile(
-    r"^\\s*(?P<prefix>(?:\\[[^]]+\\]\\s*)*)"
+    r"^\s*(?P<prefix>(?:\[[^]]+\]\s*)*)"
     r"(?P<kind>사업보고서|반기보고서|분기보고서)"
-    r"\\s*\\(\\s*(?P<year>\\d{4})\\s*\\.\\s*(?P<month>\\d{2})\\s*\\)"
+    r"\s*\(\s*(?P<year>\d{4})\s*\.\s*(?P<month>\d{2})\s*\)"
 )
-RECEIPT = re.compile(r"\\d{14}")
-CORP = re.compile(r"\\d{8}")
-TICKER = re.compile(r"\\d{6}")
-KEY_PATTERN = re.compile(r"\\d{6}\\|\\d{4}\\|(annual|q1|half|q3)\\|CFS")
+RECEIPT = re.compile(r"\d{14}")
+CORP = re.compile(r"\d{8}")
+TICKER = re.compile(r"\d{6}")
+KEY_PATTERN = re.compile(r"\d{6}\|\d{4}\|(annual|q1|half|q3)\|CFS")
 
 
 def filing_identity(record):
@@ -54,7 +54,7 @@ def filing_identity(record):
         return None
     receipt = str(record.get("rcept_no") or "")
     filed = str(record.get("rcept_dt") or "")
-    if not RECEIPT.fullmatch(receipt) or not re.fullmatch(r"\\d{8}", filed):
+    if not RECEIPT.fullmatch(receipt) or not re.fullmatch(r"\d{8}", filed):
         return None
     try:
         day = dt.datetime.strptime(filed, "%Y%m%d").date()
@@ -189,7 +189,7 @@ def save_atomic(path, obj):
                                      delete=False, suffix=".tmp") as handle:
         temp = Path(handle.name)
         json.dump(obj, handle, ensure_ascii=False, indent=2, sort_keys=True)
-        handle.write("\\n")
+        handle.write("\n")
     try:
         os.replace(temp, path)
     finally:
