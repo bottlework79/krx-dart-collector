@@ -82,6 +82,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
+            data/dart_shards/
             data/unavailable_periods.json
           key: public-dart-financial-v1-${{ github.run_id }}
       - name: Restore combined DB for existing Private importer
