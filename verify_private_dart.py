@@ -26,6 +26,7 @@ TRIAGE_SUMMARY = PRIVATE / "dart_results" / "quarterly_triage" / "quarterly_pare
 VALUATION_SUMMARY = PRIVATE / "dart_results" / "verified_valuation" / "verified_ttm_valuation_summary.json"
 FILING_EVIDENCE = PRIVATE / "data" / "dart_filing_evidence.json"
 FINANCIAL_SCORE_SUMMARY = PRIVATE / "dart_results" / "financial_score_pilot" / "financial_score_summary.json"
+CURRENT_PER_SUMMARY = PRIVATE / "dart_results" / "current_valuation" / "current_ttm_per_summary.json"
 
 # The commands intentionally call the existing reviewed PRIVATE repository
 # scripts: no raw data or private analysis logic is copied into this public repo.
@@ -219,6 +220,46 @@ def print_valuation_summary():
     print(f"VERIFICATION_TTM_YOY_CALCULATED={yoy}")
     print("VERIFICATION_TTM_PER_WITHOUT_PRICE_EVIDENCE=0")
 
+
+def print_current_per_summary():
+    """Report only fixed, aggregate statuses from today's read-only PER snapshot."""
+    info = json.loads(CURRENT_PER_SUMMARY.read_text(encoding="utf-8"))
+    allowed = {
+        "stale_latest_financial_period",
+        "latest_ttm_not_verified",
+        "nonpositive_owner_ttm",
+        "ready_for_current_market_cap",
+        "missing_current_market_cap",
+        "ambiguous_current_market_cap",
+        "invalid_market_cap_evidence",
+        "invalid_or_stale_market_cap",
+        "current_per_krx_cap_latest_verified_ttm",
+    }
+    total, available, counts = (
+        info.get("companies"), info.get("per_available"), info.get("by_status")
+    )
+    if not safe_int(total) or not safe_int(available) or not isinstance(counts, dict):
+        raise RuntimeError("Invalid current PER aggregate")
+    if any(k not in allowed or not safe_int(v) for k, v in counts.items()):
+        raise RuntimeError("Unexpected current PER status")
+    if sum(counts.values()) != total or counts.get(
+        "current_per_krx_cap_latest_verified_ttm", 0
+    ) != available:
+        raise RuntimeError("Current PER counts do not balance")
+    if info.get("financial_db_modified") is not False or info.get(
+        "financial_score_modified"
+    ) is not False or info.get("backtest_performed") is not False:
+        raise RuntimeError("Current PER verification violated read-only policy")
+    if info.get("current_cap_queries_requested") is not False or info.get(
+        "network_quote_candidates"
+    ) != 0 or available != 0:
+        raise RuntimeError("Public validation must not query or publish market caps")
+    print(f"VERIFICATION_CURRENT_PER_COMPANIES={total}")
+    print(f"VERIFICATION_CURRENT_PER_LATEST_TTM_ELIGIBLE={counts.get('ready_for_current_market_cap', 0)}")
+    print("VERIFICATION_CURRENT_PER_WITHOUT_CURRENT_QUOTES=0")
+    print("VERIFICATION_CURRENT_PER_BACKTEST_PERFORMED=False")
+
+
 def check_private_filing_evidence():
     if not FILING_EVIDENCE.exists():
         print("VERIFICATION_FILING_EVIDENCE_NOT_YET_COLLECTED=True")
@@ -394,6 +435,7 @@ def main():
         run_private_phase(name, args)
     print_safe_summary()
     print_quarterly_summary()
+    print_current_per_summary()
     print_triage_summary()
     print_valuation_summary()
     check_private_filing_evidence()
