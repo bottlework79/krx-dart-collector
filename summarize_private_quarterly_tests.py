@@ -5,6 +5,12 @@ This helper is only executed after a failed public-runner regression step.
 """
 import io
 import unittest
+import sys
+from pathlib import Path
+
+# Script is located in the public checkout, while tests are in the private
+# checkout; ensure Python can import the private operations package.
+sys.path.insert(0, str(Path.cwd()))
 
 
 def flatten(suite):
