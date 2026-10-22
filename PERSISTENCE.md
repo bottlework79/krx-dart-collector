@@ -1,18 +1,39 @@
-# Collection persistence and privacy
+# Persistence and privacy — current architecture
 
-The public pilot workflow uses a versioned GitHub Actions cache with a unique key per run and a restore prefix. This avoids immutable-key staleness. Cache retention is finite and eviction is possible; it is NOT a permanent database.
+## Durable storage
 
-The pilot also uploads a short-lived artifact even if the collector exits with an error, provided the database file exists. The artifact may be accessible to users with repository access and should not contain secrets. It is not a substitute for durable storage.
+The source of truth is **private** `bottlework79/krx-stock-data`:
+`data/financial_statements_v2.pkl.gz`.
 
-## Durable destination: private analysis repository
+The public `dart_direct_private_v2.yml` job temporarily checks out the
+private repository, collects a small DART batch, merges only trusted incoming
+records, commits the private v2 DB, then rebuilds a public metadata-only
+collection ledger. The private DB is **not** copied into the public Git tree,
+cache or artifact.
 
-A separate private repository should receive a validated, versioned, checksummed financial database through a narrowly scoped GitHub token or GitHub App. Do not put a private repository write token in a public workflow until its permissions, allowed actions, and destination are reviewed. Never print a token.
+A public-runner checkout is ephemeral; the data stays in private storage once
+the job finishes. Avoid saving secrets in runner output, logs, files or caches.
 
-Before enabling permanent collection:
-1. Confirm redistribution conditions for DART source data and avoid public raw DB publication until approved.
-2. Create a private-only data import endpoint or a restricted fine-grained token with contents write only on the private repository.
-3. Store the credential in public repository Actions secrets; do not expose it in logs or source.
-4. Validate checksum, schema, source universe and record counts on the private side before replacement.
-5. Test one tiny batch, rollback, then resume.
+## Validation of persisted data
 
-The public repository's KRX universe is a snapshot of 2,548 public ticker identifiers from the existing private price database. Refresh it when the private price universe changes. The public pilot does not modify the private database.
+`verify_private_dart.yml` runs manually in the public repo. It checks out
+the currently persisted private financial database and its matching validation
+code, runs the private auditors, then emits only aggregate pass/fail counts.
+There are no public validation artifacts and no database writes.
+
+Private-source code is executed in the same temporary runner environment:
+treat changes to the public verification workflow and runner script as
+security-sensitive. In particular, the workflow currently uses the collector's
+existing `PRIVATE_REPO_TOKEN`; a dedicated **read-only** token is preferable.
+
+## Operations
+
+Both active workflows are **workflow_dispatch-only**, not triggered by code
+pushes or schedules. This prevents the previous run-per-commit consumption.
+The private stock-price screener has its own separate schedule and is not
+moved to this repository.
+
+The original pilot/cache/checkpoint import workflows have been retired.
+Their history remains recoverable from Git history; they are not an active
+source of stored records. Do not publish private financial DB files, source
+rows or full audit details in this public repo.
