@@ -28,8 +28,10 @@ existing `PRIVATE_REPO_TOKEN`; a dedicated **read-only** token is preferable.
 
 ## Operations
 
-Both active workflows are **workflow_dispatch-only**, not triggered by code
-pushes or schedules. This prevents the previous run-per-commit consumption.
+The collection workflow is **workflow_dispatch-only**. The read-only
+verification workflow also runs automatically on pushes that change **only**
+its workflow or verifier script, not on collection metadata updates. Neither
+workflow has a schedule, and the private stock-price screener is separate.
 The private stock-price screener has its own separate schedule and is not
 moved to this repository.
 
