@@ -43,17 +43,31 @@ jobs:
           test -f private/operations/weinstein_screener.py
           test -f private/data/market_1250.pkl.gz
           python -m py_compile private/operations/run.py private/operations/weinstein_screener.py
-      - name: Update private price DB and run patterns
-        id: analysis
+      - name: Update private price DB
+        id: price_update
         continue-on-error: true
         working-directory: private
         shell: bash
         run: |
-          # Private ticker names, scores and exceptions must not appear in public logs.
-          if python -m operations.run > /tmp/krx_private_update.log 2>&1; then
-            echo "KRX_UPDATE_AND_PATTERN_ANALYSIS=SUCCESS"
+          started=$SECONDS
+          if python -c 'from data_manager import load_or_update_master_database; load_or_update_master_database()' > /tmp/krx_private_update.log 2>&1; then
+            echo "KRX_PRICE_UPDATE=SUCCESS duration_seconds=$((SECONDS-started))"
           else
-            echo "KRX_UPDATE_AND_PATTERN_ANALYSIS=FAILED"
+            echo "::error::KRX_PRICE_UPDATE=FAILED duration_seconds=$((SECONDS-started))"
+            exit 1
+          fi
+      - name: Analyze patterns using updated DB
+        id: analysis
+        if: steps.price_update.outcome == 'success'
+        continue-on-error: true
+        working-directory: private
+        shell: bash
+        run: |
+          started=$SECONDS
+          if python -c 'from data_manager import get_recent_database; from screener import run_screening; import pandas as pd; master=pd.read_pickle("data/market_1250.pkl.gz", compression="gzip"); run_screening(get_recent_database(master), master_database=master)' > /tmp/krx_private_patterns.log 2>&1; then
+            echo "KRX_PATTERN_ANALYSIS=SUCCESS duration_seconds=$((SECONDS-started))"
+          else
+            echo "::error::KRX_PATTERN_ANALYSIS=FAILED duration_seconds=$((SECONDS-started))"
             exit 1
           fi
       - name: Commit changed private master DB
@@ -84,7 +98,7 @@ jobs:
             echo "PRIVATE_MARKET_DB_CHANGED=True"
           fi
       - name: Weinstein screening on updated private DB
-        if: steps.analysis.outcome == 'success'
+        if: steps.price_update.outcome == 'success' && steps.analysis.outcome == 'success'
         working-directory: private
         shell: bash
         run: |
@@ -95,9 +109,9 @@ jobs:
             exit 1
           fi
       - name: Fail if main analysis failed
-        if: steps.analysis.outcome != 'success'
+        if: steps.price_update.outcome != 'success' || steps.analysis.outcome != 'success'
         run: |
-          echo "KRX daily analysis failed. Raw private logs were intentionally not published."
+          echo "KRX daily price update or pattern analysis failed. Raw private logs were intentionally not published."
           exit 1
 
 # No artifacts, no public ticker lists, no public DB commits.
