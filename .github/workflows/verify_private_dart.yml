@@ -1,13 +1,8 @@
 name: Verify Private DART Data (Public Runner)
 
-# A manual full read-only audit. The push trigger below is temporary, only to
-# smoke-test the migration; it will be removed after a successful first run.
+# Manual-only: no push, schedule, or PR trigger for full DB verification.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/verify_private_dart.yml'
 
 permissions:
   contents: read
