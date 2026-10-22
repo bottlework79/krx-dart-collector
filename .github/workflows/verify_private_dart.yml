@@ -1,0 +1,48 @@
+name: Verify Private DART Data (Public Runner)
+
+# A manual full read-only audit. The push trigger below is temporary, only to
+# smoke-test the migration; it will be removed after a successful first run.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify_private_dart.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-private-dart-data
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Validate private DB without public data disclosure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout public verification runner
+        uses: actions/checkout@v4
+        with:
+          path: public
+          persist-credentials: false
+
+      - name: Read private DB and code using existing repository secret
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run private DART audit without leaking individual records
+        run: python public/verify_private_dart.py
+
+      # SECURITY: no upload-artifact, no commits, no raw log printing,
+      # and no output of the private DB, private source, or report JSON files.
