@@ -23,6 +23,9 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pykrx pandas numpy
+      - name: Validate Python syntax
+        working-directory: private
+        run: python -m py_compile operations/current_ttm_per_snapshot.py
       - name: Run private current PER pilot
         working-directory: private
         run: |
