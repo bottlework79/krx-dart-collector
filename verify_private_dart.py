@@ -11,6 +11,7 @@ never uploaded as a public artifact or printed in a public Actions log.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import subprocess
@@ -23,6 +24,7 @@ SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_net_income
 QUARTERLY_SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_profit_quarterly_ttm_summary.json"
 TRIAGE_SUMMARY = PRIVATE / "dart_results" / "quarterly_triage" / "quarterly_parent_review_summary.json"
 VALUATION_SUMMARY = PRIVATE / "dart_results" / "verified_valuation" / "verified_ttm_valuation_summary.json"
+FILING_EVIDENCE = PRIVATE / "data" / "dart_filing_evidence.json"
 
 # The commands intentionally call the existing reviewed PRIVATE repository
 # scripts: no raw data or private analysis logic is copied into this public repo.
@@ -199,6 +201,47 @@ def print_valuation_summary():
     print(f"VERIFICATION_TTM_YOY_CALCULATED={yoy}")
     print("VERIFICATION_TTM_PER_WITHOUT_PRICE_EVIDENCE=0")
 
+def check_private_filing_evidence():
+    if not FILING_EVIDENCE.exists():
+        print("VERIFICATION_FILING_EVIDENCE_NOT_YET_COLLECTED=True")
+        return
+    sidecar = json.loads(FILING_EVIDENCE.read_text(encoding="utf-8"))
+    if sidecar.get("schema_version") != 1 or not isinstance(sidecar.get("entries"), dict):
+        raise RuntimeError("Invalid private filing evidence")
+    if (sidecar.get("financial_rows_version_verified") is not False
+            or sidecar.get("historical_backtest_ready") is not False):
+        raise RuntimeError("Filing evidence incorrectly asserts historical data validation")
+    count = 0
+    for key, item in sidecar["entries"].items():
+        if not isinstance(item, dict):
+            raise RuntimeError("Invalid private filing entry")
+        keyparts = key.split("|")
+        if len(keyparts) != 3 or keyparts != [
+                str(item.get("ticker")), str(item.get("year")), str(item.get("report"))]:
+            raise RuntimeError("Private filing identity mismatch")
+        if (item.get("financial_rows_version_verified") is not False
+                or item.get("historical_backtest_ready") is not False):
+            raise RuntimeError("Historical financial row provenance not established")
+        status = item.get("status")
+        if status not in ("first_unamended_filing_found",
+                          "no_unamended_original_filing", "ambiguous_first_filing_date"):
+            raise RuntimeError("Unknown filing evidence status")
+        if status == "first_unamended_filing_found":
+            receipt = str(item.get("filing_receipt") or "")
+            date = str(item.get("filing_date") or "")
+            if not (len(receipt) == 14 and receipt.isascii() and receipt.isdecimal()):
+                raise RuntimeError("Invalid private receipt evidence")
+            try:
+                parsed = dt.date.fromisoformat(date)
+            except ValueError:
+                raise RuntimeError("Invalid private filing date") from None
+            if parsed.isoformat() != date:
+                raise RuntimeError("Noncanonical private filing date")
+            count += 1
+    print(f"VERIFICATION_FIRST_DART_FILINGS_MATCHED={count}")
+    print(f"VERIFICATION_DART_FILING_SIDECAR_ENTRIES={len(sidecar['entries'])}")
+    print("VERIFICATION_FIRST_FILING_DOES_NOT_VALIDATE_HISTORICAL_VALUES=True")
+
 def run_private_phase(name, args):
     # Do NOT stream private stdout/stderr to a publicly visible job log.
     # A new public workflow run's logs and artifacts can be read by anyone.
@@ -247,6 +290,7 @@ def main():
     print_quarterly_summary()
     print_triage_summary()
     print_valuation_summary()
+    check_private_filing_evidence()
 
 
 if __name__ == "__main__":
