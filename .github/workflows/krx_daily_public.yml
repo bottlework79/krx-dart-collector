@@ -1,0 +1,92 @@
+name: KRX Daily Stock Screener (Public Runner)
+
+# Run private KRX code on public Actions minutes, keep data and results private.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekdays 16:30 KST (07:30 UTC), same as previous private workflow.
+    - cron: '30 7 * * 1-5'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-daily-public-runner
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout public workflow
+        uses: actions/checkout@v4
+        with:
+          path: public
+          persist-credentials: false
+      - name: Checkout private KRX data and implementation
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install stock dependencies
+        run: python -m pip install finance-datareader pandas numpy
+      - name: Verify private entrypoints exist
+        run: |
+          test -f private/operations/run.py
+          test -f private/operations/weinstein_screener.py
+          test -f private/data/market_1250.pkl.gz
+          python -m py_compile private/operations/run.py private/operations/weinstein_screener.py
+      - name: Update private price DB and run patterns
+        id: analysis
+        continue-on-error: true
+        working-directory: private
+        shell: bash
+        run: |
+          # Private ticker names, scores and exceptions must not appear in public logs.
+          if python -m operations.run > /tmp/krx_private_update.log 2>&1; then
+            echo "KRX_UPDATE_AND_PATTERN_ANALYSIS=SUCCESS"
+          else
+            echo "KRX_UPDATE_AND_PATTERN_ANALYSIS=FAILED"
+            exit 1
+          fi
+      - name: Commit changed private master DB
+        if: always()
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/market_1250.pkl.gz
+          if git diff --cached --quiet; then
+            echo "PRIVATE_MARKET_DB_CHANGED=False"
+          else
+            git commit -m "Update 1250-day master database" > /dev/null
+            git push origin HEAD:main > /dev/null 2>&1
+            echo "PRIVATE_MARKET_DB_CHANGED=True"
+          fi
+      - name: Weinstein screening on updated private DB
+        if: steps.analysis.outcome == 'success'
+        working-directory: private
+        shell: bash
+        run: |
+          if python -m operations.weinstein_screener > /tmp/krx_private_weinstein.log 2>&1; then
+            echo "PRIVATE_WEINSTEIN_SCREENING=SUCCESS"
+          else
+            echo "PRIVATE_WEINSTEIN_SCREENING=FAILED"
+            exit 1
+          fi
+      - name: Fail if main analysis failed
+        if: steps.analysis.outcome != 'success'
+        run: |
+          echo "KRX daily analysis failed. Raw private logs were intentionally not published."
+          exit 1
+
+# No artifacts, no public ticker lists, no public DB commits.
