@@ -256,6 +256,9 @@ def print_current_per_summary():
         raise RuntimeError("Public validation must not query or publish market caps")
     print(f"VERIFICATION_CURRENT_PER_COMPANIES={total}")
     print(f"VERIFICATION_CURRENT_PER_LATEST_TTM_ELIGIBLE={counts.get('ready_for_current_market_cap', 0)}")
+    for status in sorted(allowed):
+        if status in counts:
+            print(f"VERIFICATION_CURRENT_PER_STATUS_{status.upper()}={counts[status]}")
     print("VERIFICATION_CURRENT_PER_WITHOUT_CURRENT_QUOTES=0")
     print("VERIFICATION_CURRENT_PER_BACKTEST_PERFORMED=False")
 
