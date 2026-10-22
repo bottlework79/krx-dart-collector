@@ -1,0 +1,91 @@
+name: DART Direct Private V2 Pilot
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: "New companies per run (1-25)"
+        required: true
+        default: "2"
+permissions:
+  contents: write
+concurrency:
+  group: dart-direct-private-v2
+  cancel-in-progress: false
+jobs:
+  collect-and-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout public collector
+        uses: actions/checkout@v4
+        with:
+          path: public
+          persist-credentials: true
+      - name: Checkout private storage with limited secret
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        working-directory: public
+        run: pip install -r requirements.txt
+      - name: Verify scripts
+        working-directory: public
+        run: python -m py_compile collect_dart.py select_history_batch.py merge_private_v2.py build_dart_history.py
+      - name: Select and collect unimported reports
+        working-directory: public
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$BATCH_SIZE" =~ ^[0-9]+$ ]] || [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
+            echo "Invalid batch size"; exit 1
+          fi
+          python select_history_batch.py --batch-size "$BATCH_SIZE" > /tmp/dart_v2_selection.log
+          cat /tmp/dart_v2_selection.log
+          BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/dart_v2_selection.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
+          python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 2
+          python validate_financial_db.py
+      - name: Merge fresh batch into Private v2
+        working-directory: public
+        run: |
+          python merge_private_v2.py --batch data/financial_statements.pkl.gz --private-db ../private/data/financial_statements_v2.pkl.gz
+      - name: Commit verified Private v2 data
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/financial_statements_v2.pkl.gz
+          if ! git diff --cached --quiet; then
+            git commit -m "Import newly collected DART batch into private v2"
+            git push origin HEAD:main
+          fi
+      - name: Rebuild public metadata only after Private push
+        working-directory: public
+        run: |
+          python build_dart_history.py --private-db ../private/data/financial_statements_v2.pkl.gz
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          h=json.loads(Path("data/dart_collection_history.json").read_text())
+          assert all(v["status"] in ("imported","unavailable") for v in h["entries"].values())
+          print("PUBLIC_HISTORY_ENTRIES",len(h["entries"]))
+          PY
+      - name: Commit Public collection history
+        working-directory: public
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/dart_collection_history.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update DART imported coverage after Private v2 verification"
+            git push origin HEAD:main
+          fi
