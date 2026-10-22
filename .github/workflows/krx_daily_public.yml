@@ -69,7 +69,18 @@ jobs:
             echo "PRIVATE_MARKET_DB_CHANGED=False"
           else
             git commit -m "Update 1250-day master database" > /dev/null
-            git push origin HEAD:main > /dev/null 2>&1
+            # A long-running job may start before other private commits land.
+            # Preserve those commits without force-pushing or exposing private logs.
+            git fetch origin main > /tmp/krx_private_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/krx_private_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo "::error::PRIVATE_DB_REBASE_CONFLICT: remote DB may have changed; no force push attempted"
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/krx_private_push.log 2>&1; then
+              echo "::error::PRIVATE_DB_PUSH_FAILED: check token write access, branch protection or concurrent commits"
+              exit 1
+            fi
             echo "PRIVATE_MARKET_DB_CHANGED=True"
           fi
       - name: Weinstein screening on updated private DB
