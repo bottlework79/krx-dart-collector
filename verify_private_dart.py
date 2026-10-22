@@ -43,6 +43,7 @@ STEPS = (
     ("Quarterly discrepancy triage regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_quarterly_parent_triage.py")),
     ("Diagnose quarterly account and amount discrepancies", ("-m", "operations.diagnose_quarterly_parent_discrepancies")),
     ("TTM valuation bridge regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_verified_ttm_valuation.py")),
+    ("Existing market cap integration regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_existing_market_cap_bridge.py")),
     ("Validate date-gated TTM valuation bridge", ("-m", "operations.calculate_verified_ttm_valuation")),
 )
 
