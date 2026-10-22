@@ -1,0 +1,68 @@
+name: Backfill Private DART Filing Evidence
+
+# Single limited pilot on this new workflow's initial push.
+# Once verified, remove the push trigger; subsequent backfills are manual.
+on:
+  workflow_dispatch:
+    inputs:
+      companies:
+        description: "Maximum companies with missing filing dates (1-5)"
+        default: "2"
+        required: true
+  push:
+    branches: [main]
+    paths: ['.github/workflows/dart_filing_evidence.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-dart-filing-evidence
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Run one-time DART filing receipt backfill pilot' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: public
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only required DART HTTP client
+        run: python -m pip install 'requests>=2.31,<3'
+      - name: Check filing matching and pagination regressions
+        working-directory: private
+        run: python -m unittest discover -s test -p test_dart_filing_evidence.py
+      - name: Query first filings and write private sidecar only
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          LIMIT: ${{ inputs.companies || '1' }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$LIMIT" =~ ^[1-5]$ ]]; then
+            echo "Invalid company limit"; exit 1
+          fi
+          python -m operations.dart_filing_evidence --limit "$LIMIT"
+      - name: Commit private filing evidence, never financial DB
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/dart_filing_evidence.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Backfill original DART filing date and receipt sidecar"
+            git push origin HEAD:main
+          fi
