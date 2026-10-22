@@ -20,6 +20,7 @@ from pathlib import Path
 PRIVATE = Path(os.environ.get("GITHUB_WORKSPACE", Path(__file__).parent)) / "private"
 DATABASE = PRIVATE / "data" / "financial_statements_v2.pkl.gz"
 SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_net_income_annual_summary.json"
+QUARTERLY_SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_profit_quarterly_ttm_summary.json"
 
 # The commands intentionally call the existing reviewed PRIVATE repository
 # scripts: no raw data or private analysis logic is copied into this public repo.
@@ -35,6 +36,8 @@ STEPS = (
     ("Annual parent net income calculation", ("-m", "operations.calculate_verified_parent_profit")),
     ("Unresolved annual account diagnosis", ("-m", "operations.diagnose_unresolved_parent_profit")),
     ("Original account diagnosis", ("-m", "operations.diagnose_missing_parent_raw")),
+    ("Quarterly and TTM regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_quarterly_parent_profit.py")),
+    ("Quarterly and TTM calculation view", ("-m", "operations.calculate_quarterly_parent_profit")),
 )
 
 # Only known, non-sensitive result categories are allowed in public logs.
@@ -50,6 +53,53 @@ ALLOWED_STATUSES = (
     "ambiguous_standard",
 )
 
+
+
+# Independent aggregate-only categories for the quarterly and TTM view.
+ALLOWED_QUARTER_STATES = (
+    "standard_parent", "missing_standard_owner", "ambiguous_owner_amounts",
+    "ambiguous_multiple_financial_payloads", "missing_q1_fields",
+    "q1_from_explicit_ytd", "q1_from_explicit_quarter",
+    "q1_quarter_ytd_disagreement", "quarter_ytd_arithmetic_disagreement",
+    "ytd_only", "quarter_only",
+)
+ALLOWED_Q4_STATES = (
+    "missing_q3_ytd_or_annual", "unverified_annual_owner_profit",
+    "future_comparative_filing_date_unknown", "mixed_statement_scope_blocked",
+    "annual_minus_q3_verified_ytd",
+)
+ALLOWED_TTM_STATES = (
+    "missing_or_unverified_current_ytd", "missing_prior_year_quarter_or_annual",
+    "missing_or_unverified_prior_amount", "mixed_statement_scope_blocked",
+    "future_comparative_filing_date_unknown", "calculated_from_verified_ytd",
+    "unverified_annual_owner_profit", "verified_annual",
+)
+
+
+def print_quarterly_summary():
+    source = json.loads(QUARTERLY_SUMMARY.read_text(encoding="utf-8"))
+    for label, statuses, count_key, allowed in (
+        ("QUARTERLY", source.get("quarterly_by_status"),
+         "quarterly_periods", ALLOWED_QUARTER_STATES),
+        ("Q4", source.get("q4_by_status"), "q4_periods", ALLOWED_Q4_STATES),
+        ("TTM", source.get("ttm_by_status"), "ttm_periods", ALLOWED_TTM_STATES),
+    ):
+        total = source.get(count_key)
+        if type(total) is not int or total < 0 or not isinstance(statuses, dict):
+            raise RuntimeError(f"Unusable aggregate quarterly report ({label})")
+        if any(k not in allowed or type(v) is not int or v < 0
+               for k, v in statuses.items()):
+            raise RuntimeError(f"Unrecognized aggregate quarterly state ({label})")
+        if sum(statuses.values()) != total:
+            raise RuntimeError(f"Nonbalancing aggregate quarterly states ({label})")
+        print(f"VERIFICATION_{label}_PERIODS={total}")
+        for status in allowed:
+            if status in statuses:
+                print(f"VERIFICATION_{label}_{status.upper()}={statuses[status]}")
+    if source.get("database_modified") is not False or source.get("score_modified") is not False:
+        raise RuntimeError("Quarterly verification attempted a forbidden write")
+    if source.get("historical_backtest_ready") is not False:
+        raise RuntimeError("Quarterly future filing dates have not been validated")
 
 def run_private_phase(name, args):
     # Do NOT stream private stdout/stderr to a publicly visible job log.
@@ -96,6 +146,7 @@ def main():
     for name, args in STEPS:
         run_private_phase(name, args)
     print_safe_summary()
+    print_quarterly_summary()
 
 
 if __name__ == "__main__":
