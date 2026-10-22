@@ -114,6 +114,18 @@ def run_private_phase(name, args):
         check=False,
     )
     if completed.returncode:
+        if name == "Quarterly and TTM regression tests":
+            # Only counts and ordinal positions, never test names or traces.
+            diagnostic = subprocess.run(
+                (sys.executable, str(PRIVATE.parent / "public" / "summarize_private_quarterly_tests.py")),
+                cwd=PRIVATE, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, text=True, timeout=45, check=False,
+            )
+            for line in diagnostic.stdout.splitlines():
+                if line.startswith("TEST_DIAGNOSTIC_") and all(
+                    ch.isdigit() or ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_=," for ch in line
+                ):
+                    print(line)
         raise RuntimeError(f"Private validation phase failed ({name}, exit {completed.returncode})")
     print(f"PASS: {name}", flush=True)
 
