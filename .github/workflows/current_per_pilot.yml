@@ -1,0 +1,30 @@
+name: Current PER Pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/current_per_pilot.yml'
+permissions:
+  contents: read
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout private project
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pykrx pandas numpy
+      - name: Run private current PER pilot
+        working-directory: private
+        run: |
+          python -m operations.current_ttm_per_snapshot --current-caps --max-tickers 3 > /dev/null 2>&1
+          echo "CURRENT_PER_PILOT_FINISHED"
