@@ -21,6 +21,8 @@ PRIVATE = Path(os.environ.get("GITHUB_WORKSPACE", Path(__file__).parent)) / "pri
 DATABASE = PRIVATE / "data" / "financial_statements_v2.pkl.gz"
 SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_net_income_annual_summary.json"
 QUARTERLY_SUMMARY = PRIVATE / "dart_results" / "verified_calculation" / "parent_profit_quarterly_ttm_summary.json"
+TRIAGE_SUMMARY = PRIVATE / "dart_results" / "quarterly_triage" / "quarterly_parent_review_summary.json"
+VALUATION_SUMMARY = PRIVATE / "dart_results" / "verified_valuation" / "verified_ttm_valuation_summary.json"
 
 # The commands intentionally call the existing reviewed PRIVATE repository
 # scripts: no raw data or private analysis logic is copied into this public repo.
@@ -38,6 +40,10 @@ STEPS = (
     ("Original account diagnosis", ("-m", "operations.diagnose_missing_parent_raw")),
     ("Quarterly and TTM regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_quarterly_parent_profit.py")),
     ("Quarterly and TTM calculation view", ("-m", "operations.calculate_quarterly_parent_profit")),
+    ("Quarterly discrepancy triage regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_quarterly_parent_triage.py")),
+    ("Diagnose quarterly account and amount discrepancies", ("-m", "operations.diagnose_quarterly_parent_discrepancies")),
+    ("TTM valuation bridge regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_verified_ttm_valuation.py")),
+    ("Validate date-gated TTM valuation bridge", ("-m", "operations.calculate_verified_ttm_valuation")),
 )
 
 # Only known, non-sensitive result categories are allowed in public logs.
@@ -101,6 +107,92 @@ def print_quarterly_summary():
     if source.get("historical_backtest_ready") is not False:
         raise RuntimeError("Quarterly future filing dates have not been validated")
 
+# Explicit fixed categories only. Do not reflect private row labels or values.
+TRIAGE_STATES = frozenset({
+    "missing_standard_owner",
+    "quarter_ytd_arithmetic_disagreement",
+    "q1_quarter_ytd_disagreement",
+})
+TRIAGE_CATEGORIES = frozenset({
+    "nonstandard_two_field_attribution_candidate",
+    "nonstandard_partial_or_ambiguous_equation",
+    "standard_owner_code_without_usable_numbers",
+    "nonstandard_owner_label_without_balanced_equation",
+    "nonstandard_minority_label_only",
+    "no_recognized_owner_attribution",
+    "parent_only_arithmetic_conflict_total_reconciles",
+    "parent_and_total_arithmetic_conflict",
+    "parent_arithmetic_conflict_total_inconclusive",
+    "prior_owner_components_unavailable",
+    "q1_three_month_cumulative_disagreement",
+})
+PER_STATES = frozenset({
+    "unverified_ttm_profit",
+    "nonpositive_ttm_profit",
+    "missing_dated_market_cap_and_filing_evidence",
+    "ambiguous_market_cap_evidence",
+    "unapproved_market_cap_source",
+    "invalid_market_cap",
+    "missing_dated_filing_evidence",
+    "quote_before_financial_disclosure",
+    "quote_after_requested_asof_date",
+    "quote_stale_relative_to_filing",
+    "provisional_per_external_evidence_not_authenticated",
+})
+
+def safe_int(value):
+    return type(value) is int and value >= 0
+
+def print_triage_summary():
+    info = json.loads(TRIAGE_SUMMARY.read_text(encoding="utf-8"))
+    total = info.get("total_review_cases")
+    by_status, by_category = info.get("by_original_status"), info.get("by_category")
+    if not safe_int(total) or not isinstance(by_status, dict) or not isinstance(by_category, dict):
+        raise RuntimeError("Unusable quarterly triage summary")
+    if any(k not in TRIAGE_STATES or not safe_int(v) for k,v in by_status.items()):
+        raise RuntimeError("Unexpected quarterly triage status")
+    if any(
+        not safe_int(v) or len(k.split("/")) != 2 or
+        k.split("/")[0] not in TRIAGE_STATES or
+        k.split("/")[1] not in TRIAGE_CATEGORIES
+        for k,v in by_category.items()
+    ):
+        raise RuntimeError("Unexpected quarterly triage category")
+    if sum(by_status.values()) != total or sum(by_category.values()) != total:
+        raise RuntimeError("Quarterly triage counts do not balance")
+    if info.get("auto_mapped") != 0 or info.get("private_db_modified") is not False:
+        raise RuntimeError("Quarterly audit violated read-only policy")
+    print(f"VERIFICATION_QUARTERLY_TRIAGE_TOTAL={total}")
+    for kind in sorted(TRIAGE_STATES):
+        print(f"VERIFICATION_TRIAGE_{kind.upper()}={by_status.get(kind,0)}")
+    for category in sorted(TRIAGE_CATEGORIES):
+        number = sum(v for key,v in by_category.items() if key.split("/")[1] == category)
+        if number:
+            print(f"VERIFICATION_TRIAGE_CAUSE_{category.upper()}={number}")
+
+def print_valuation_summary():
+    info = json.loads(VALUATION_SUMMARY.read_text(encoding="utf-8"))
+    total = info.get("ttm_periods")
+    statuses = info.get("per_by_status")
+    if not safe_int(total) or not isinstance(statuses, dict):
+        raise RuntimeError("Unusable valuation summary")
+    if any(k not in PER_STATES or not safe_int(v) for k,v in statuses.items()):
+        raise RuntimeError("Unexpected valuation status")
+    if sum(statuses.values()) != total:
+        raise RuntimeError("Valuation counts do not balance")
+    if info.get("database_modified") is not False or info.get("financial_score_modified") is not False:
+        raise RuntimeError("Valuation bridge violated read-only policy")
+    if info.get("historical_backtest_ready") is not False:
+        raise RuntimeError("Prematurely marked valuation as backtest ready")
+    if info.get("provided_market_cap_evidence_rows") != 0:
+        raise RuntimeError("Public verification must not load nonpublic quote evidence")
+    if info.get("per_calculable_provisional") != 0:
+        raise RuntimeError("Public verifier must withhold unevidenced PER")
+    print(f"VERIFICATION_TTM_VALUATION_PERIODS={total}")
+    print(f"VERIFICATION_TTM_POSITIVE_NET={info['positive_verified_ttm']}")
+    print(f"VERIFICATION_TTM_YOY_CALCULATED={info['yoy_calculable']}")
+    print("VERIFICATION_TTM_PER_WITHOUT_PRICE_EVIDENCE=0")
+
 def run_private_phase(name, args):
     # Do NOT stream private stdout/stderr to a publicly visible job log.
     # A new public workflow run's logs and artifacts can be read by anyone.
@@ -147,6 +239,8 @@ def main():
         run_private_phase(name, args)
     print_safe_summary()
     print_quarterly_summary()
+    print_triage_summary()
+    print_valuation_summary()
 
 
 if __name__ == "__main__":
