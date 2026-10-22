@@ -36,7 +36,9 @@ jobs:
         run: pip install -r requirements.txt
       - name: Verify scripts
         working-directory: public
-        run: python -m py_compile collect_dart.py select_history_batch.py merge_private_v2.py build_dart_history.py
+        run: |
+          python -m py_compile collect_dart.py select_history_batch.py merge_private_v2.py build_dart_history.py
+          python tests/test_missing_cache_static.py
       - name: Select and collect unimported reports
         working-directory: public
         env:
