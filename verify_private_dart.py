@@ -46,6 +46,7 @@ STEPS = (
     ("Diagnose quarterly account and amount discrepancies", ("-m", "operations.diagnose_quarterly_parent_discrepancies")),
     ("TTM valuation bridge regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_verified_ttm_valuation.py")),
     ("Current-only TTM PER snapshot tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_current_ttm_per_snapshot.py")),
+    ("Current-only PER snapshot without market network calls", ("-m", "operations.current_ttm_per_snapshot")),
     ("Existing market cap integration regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_existing_market_cap_bridge.py")),  # Includes original-filing-only safety checks
     ("DART filing dates and receipts regression tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_dart_filing_evidence.py")),
     ("Original filing owner table parser tests", ("-m", "unittest", "discover", "-s", "test", "-p", "test_original_dart_owner_table.py")),
