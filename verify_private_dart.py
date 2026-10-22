@@ -248,6 +248,10 @@ def check_private_filing_evidence():
             if parsed.isoformat() != date:
                 raise RuntimeError("Noncanonical private filing date")
             count += 1
+    valuation = json.loads(VALUATION_SUMMARY.read_text(encoding="utf-8"))
+    if (valuation.get("official_first_filings") != count
+            or valuation.get("official_metadata_periods") != len(sidecar["entries"])):
+        raise RuntimeError("Filing receipt coverage differs between private sidecar and valuation summary")
     print(f"VERIFICATION_FIRST_DART_FILINGS_MATCHED={count}")
     print(f"VERIFICATION_DART_FILING_SIDECAR_ENTRIES={len(sidecar['entries'])}")
     print("VERIFICATION_FIRST_FILING_DOES_NOT_VALIDATE_HISTORICAL_VALUES=True")
