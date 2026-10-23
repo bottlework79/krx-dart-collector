@@ -32,7 +32,7 @@ def main():
                         if year<today.year or (today-checked).days<7:continue
                     pending+=1
         if pending:
-            print("AUTO_DART_BATCH="+json.dumps({"batch_index":i//args.batch_size,"batch_size":args.batch_size,"pending":pending,"selected":selected}))
+            print("AUTO_DART_BATCH="+json.dumps({"batch_index":i//args.batch_size,"batch_size":args.batch_size,"pending":pending}))
             return
     raise SystemExit("No incomplete batches")
 if __name__=="__main__":main()
