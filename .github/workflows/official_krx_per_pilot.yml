@@ -28,6 +28,7 @@ jobs:
       - name: Validate source
         working-directory: private
         run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
+      # Read-only candidate ROE/FCF check; never promote to verified scores.
       - name: Audit latest annual ROE and FCF input coverage
         working-directory: private
         run: python -m operations.audit_current_ratio_coverage
