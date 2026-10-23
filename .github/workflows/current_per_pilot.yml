@@ -63,6 +63,13 @@ jobs:
               raise SystemExit("INVALID_ERROR_CLASS_COUNTS")
           if sum(kinds.values()) != diagnostics["fallback_exception"]:
               raise SystemExit("ERROR_CLASS_COUNT_MISMATCH")
+          stages = diagnostics.get("fallback_keyerror_stage", {})
+          if not isinstance(stages, dict) or set(stages) != {"api", "columns", "other"} or any(type(v) is not int or v < 0 for v in stages.values()):
+              raise SystemExit("INVALID_KEYERROR_STAGE")
+          if sum(stages.values()) != kinds.get("KeyError", 0):
+              raise SystemExit("KEYERROR_STAGE_MISMATCH")
+          for stage in ("api", "columns", "other"):
+              print("CURRENT_PER_KRX_KEYERROR_STAGE_" + stage.upper() + "=" + str(stages[stage]))
           for kind in sorted(kinds):
               print("CURRENT_PER_KRX_ERROR_CLASS_" + kind.upper() + "=" + str(kinds[kind]))
           print("CURRENT_PER_CALCULATED=" + str(calculated))
