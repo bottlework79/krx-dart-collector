@@ -57,6 +57,14 @@ jobs:
               if type(value) is not int or value < 0:
                   raise SystemExit("INVALID_DIAGNOSTIC_COUNT")
               print("CURRENT_PER_KRX_" + key.upper() + "=" + str(value))
+          kinds = diagnostics.get("fallback_error_types", {})
+          permitted = {"KeyError", "ValueError", "TypeError", "IndexError", "AttributeError", "ConnectionError", "Timeout", "JSONDecodeError", "Other"}
+          if not isinstance(kinds, dict) or any(k not in permitted or type(v) is not int or v < 0 for k,v in kinds.items()):
+              raise SystemExit("INVALID_ERROR_CLASS_COUNTS")
+          if sum(kinds.values()) != diagnostics["fallback_exception"]:
+              raise SystemExit("ERROR_CLASS_COUNT_MISMATCH")
+          for kind in sorted(kinds):
+              print("CURRENT_PER_KRX_ERROR_CLASS_" + kind.upper() + "=" + str(kinds[kind]))
           print("CURRENT_PER_CALCULATED=" + str(calculated))
           print("CURRENT_PER_MISSING_QUOTE=" + str(statuses.get("missing_current_market_cap", 0)))
           PY
