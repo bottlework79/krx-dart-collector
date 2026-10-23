@@ -79,11 +79,11 @@ def request(key,corp,year,report):
         r.raise_for_status()
         payload=r.json()
     except Exception:
-        print("DART_REQUEST_FAILURE="+json.dumps({"ticker_corp":corp,"year":year,"report":report,"seconds":round(time.monotonic()-started,2)}),flush=True)
+        print("DART_REQUEST_FAILURE="+json.dumps({"error_type":"request_failed","seconds":round(time.monotonic()-started,2)}),flush=True)
         raise
     status=payload.get("status")
     result=("unavailable",[]) if status=="013" else (("api_"+str(status),[]) if status!="000" else ("ok",payload.get("list",[])))
-    print("DART_REQUEST_TIMING="+json.dumps({"year":year,"report":report,"seconds":round(time.monotonic()-started,2),"status":result[0]}),flush=True)
+    print("DART_REQUEST_TIMING="+json.dumps({"seconds":round(time.monotonic()-started,2),"status":result[0]}),flush=True)
     return result
 
 def main():
@@ -180,10 +180,10 @@ def main():
                     missing[(code,year,report)]=today.isoformat()
                 else:
                     stats["errors"]+=1
-                    print("DART_COLLECT_ERROR",code,year,report,status)
+                    print("DART_COLLECT_ERROR",status)
             except (requests.RequestException,ValueError,OSError) as exc:
                 stats["errors"]+=1
-                print("DART_COLLECT_ERROR",code,year,report,type(exc).__name__)
+                print("DART_COLLECT_ERROR",type(exc).__name__)
             completed+=1
             if completed%20==0 or completed==len(tasks):
                 print("DART_PROGRESS="+json.dumps({"completed":completed,"total":len(tasks),"elapsed_seconds":round(time.monotonic()-batch_started,1)}),flush=True)
@@ -192,6 +192,6 @@ def main():
     MISSING.write_text(json.dumps({"|".join(map(str,k)):v for k,v in sorted(missing.items())},ensure_ascii=False,sort_keys=True),encoding="utf-8")
     stats["stored"]=len(db)
     stats["compressed_bytes"]=DB.stat().st_size
-    print("PUBLIC_DART_BATCH="+json.dumps(stats,ensure_ascii=False))
+    print("PUBLIC_DART_BATCH="+json.dumps({k:v for k,v in stats.items() if k != "selected"},ensure_ascii=False))
     if stats["errors"]:raise SystemExit("Incomplete batch; errors require review")
 if __name__=="__main__":main()
