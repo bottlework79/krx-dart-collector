@@ -1,0 +1,61 @@
+name: Official KRX Current PER Pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/official_krx_per_pilot.yml'
+permissions:
+  contents: read
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout private project
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install private DB dependencies
+        run: pip install pandas numpy
+      - name: Validate source
+        working-directory: private
+        run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
+      - name: Calculate private PER with official KRX API
+        working-directory: private
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+        run: |
+          set +e
+          python -m operations.current_ttm_per_snapshot --krx-openapi > /dev/null 2>&1
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "OFFICIAL_KRX_PER_RUN_FAILED=1"
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("dart_results/current_valuation/current_ttm_per_summary.json").read_text())
+          d=r.get("quote_diagnostics", {})
+          a=d.get("openapi", {})
+          keys=("requests","http_errors","response_errors","empty_responses","valid_rows","duplicate_tickers")
+          if any(type(a.get(k)) is not int or a[k]<0 for k in keys):
+              raise SystemExit("INVALID_API_STATS")
+          if any(type(d.get(k)) is not int or d[k]<0 for k in ("openapi_eligible","openapi_matched")):
+              raise SystemExit("INVALID_MATCH_STATS")
+          if type(r.get("per_available")) is not int:
+              raise SystemExit("INVALID_PER_STATS")
+          for k in keys:
+              print("OFFICIAL_KRX_"+k.upper()+"="+str(a[k]))
+          print("OFFICIAL_KRX_ELIGIBLE="+str(d["openapi_eligible"]))
+          print("OFFICIAL_KRX_MATCHED="+str(d["openapi_matched"]))
+          print("OFFICIAL_KRX_PER_AVAILABLE="+str(r["per_available"]))
+          PY
