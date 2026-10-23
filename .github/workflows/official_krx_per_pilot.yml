@@ -28,7 +28,7 @@ jobs:
       - name: Validate source
         working-directory: private
         run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
-      # Generate private D&A XBRL review queue; no financial DB or score changes.
+      # Audit filing receipt coverage for targeted XBRL; no financial DB changes.
       # Read-only candidate ROE/FCF check; never promote to verified scores.
       - name: Audit latest annual ROE and FCF input coverage
         working-directory: private
