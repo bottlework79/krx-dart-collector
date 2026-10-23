@@ -32,6 +32,11 @@ jobs:
       - name: Audit latest annual ROE and FCF input coverage
         working-directory: private
         run: python -m operations.audit_current_ratio_coverage
+      - name: Calculate provisional PBR PSR FCF yield from official KRX
+        working-directory: private
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+        run: python -m operations.current_other_multiples_pilot
       - name: Calculate private PER with official KRX API
         working-directory: private
         env:
