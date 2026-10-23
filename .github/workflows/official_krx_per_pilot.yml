@@ -55,6 +55,22 @@ jobs:
               raise SystemExit("INVALID_PER_STATS")
           for k in keys:
               print("OFFICIAL_KRX_"+k.upper()+"="+str(a[k]))
+          status=a.get("http_status", {})
+          network=a.get("network_error_types", {})
+          permitted_status={"400","401","403","404","405","408","429","500","502","503","504","other"}
+          permitted_network={"URLError","TimeoutError","OSError","ValueError","Other"}
+          if not isinstance(status,dict) or not isinstance(network,dict):
+              raise SystemExit("INVALID_HTTP_DIAGNOSTICS")
+          if any(k not in permitted_status or type(v) is not int or v<0 for k,v in status.items()):
+              raise SystemExit("INVALID_HTTP_STATUS_COUNTS")
+          if any(k not in permitted_network or type(v) is not int or v<0 for k,v in network.items()):
+              raise SystemExit("INVALID_NETWORK_ERROR_COUNTS")
+          if sum(status.values())+sum(network.values()) != a["http_errors"]:
+              raise SystemExit("UNBALANCED_HTTP_ERRORS")
+          for k in sorted(status):
+              print("OFFICIAL_KRX_HTTP_STATUS_"+k+"="+str(status[k]))
+          for k in sorted(network):
+              print("OFFICIAL_KRX_NETWORK_ERROR_"+k.upper()+"="+str(network[k]))
           print("OFFICIAL_KRX_ELIGIBLE="+str(d["openapi_eligible"]))
           print("OFFICIAL_KRX_MATCHED="+str(d["openapi_matched"]))
           print("OFFICIAL_KRX_PER_AVAILABLE="+str(r["per_available"]))
