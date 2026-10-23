@@ -28,7 +28,7 @@ jobs:
       - name: Validate source
         working-directory: private
         run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
-      # Recheck annual vs TTM eligibility and Q3 bridge; read-only, no score changes.
+      # Diagnose quarterly coverage and Q3 bridge; read-only, no score changes.
       # Read-only candidate ROE/FCF check; never promote to verified scores.
       - name: Audit latest annual ROE and FCF input coverage
         working-directory: private
