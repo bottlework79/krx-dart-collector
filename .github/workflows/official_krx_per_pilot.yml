@@ -24,6 +24,7 @@ jobs:
           python-version: '3.11'
       - name: Install private DB dependencies
         run: pip install pandas numpy
+      # Recheck after KRX service activation.
       - name: Validate source
         working-directory: private
         run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
