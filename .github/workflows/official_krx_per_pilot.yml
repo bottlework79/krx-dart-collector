@@ -75,4 +75,6 @@ jobs:
           print("OFFICIAL_KRX_ELIGIBLE="+str(d["openapi_eligible"]))
           print("OFFICIAL_KRX_MATCHED="+str(d["openapi_matched"]))
           print("OFFICIAL_KRX_PER_AVAILABLE="+str(r["per_available"]))
+          if a["http_errors"] or a["response_errors"] or d["openapi_matched"] == 0 or r["per_available"] == 0:
+              raise SystemExit("OFFICIAL_KRX_PER_NOT_READY")
           PY
