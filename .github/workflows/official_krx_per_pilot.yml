@@ -28,7 +28,7 @@ jobs:
       - name: Validate source
         working-directory: private
         run: python -m py_compile operations/krx_openapi_caps.py operations/current_ttm_per_snapshot.py
-      # Diagnose quarterly coverage and Q3 bridge; read-only, no score changes.
+      # Test latest available YTD bridge (Q3, half, Q1); read-only, no score changes.
       # Read-only candidate ROE/FCF check; never promote to verified scores.
       - name: Audit latest annual ROE and FCF input coverage
         working-directory: private
