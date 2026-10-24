@@ -38,7 +38,7 @@ jobs:
         env:
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
         run: python -m operations.current_other_multiples_pilot
-      # Print selected company name for manual depreciation cross-check.
+      # Print selected filing ticker and report year for manual depreciation cross-check.
       - name: Smoke test one original XBRL filing without exposing company data
         working-directory: private
         env:
