@@ -38,7 +38,7 @@ jobs:
         env:
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
         run: python -m operations.current_other_multiples_pilot
-      # Cross-check KR Motors 2025 note 22 amount against XBRL numeric facts.
+      # Inspect KR Motors 2025 XBRL note text blocks and embedded tables.
       - name: Smoke test one original XBRL filing without exposing company data
         working-directory: private
         env:
