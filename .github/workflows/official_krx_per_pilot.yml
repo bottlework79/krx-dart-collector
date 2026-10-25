@@ -38,7 +38,7 @@ jobs:
         env:
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
         run: python -m operations.current_other_multiples_pilot
-      # Pilot original DART filing document ZIP note 22 search for KR Motors.
+      # Validate KR Motors DART note 22 amount and label in the same HTML row.
       - name: Smoke test one original XBRL filing without exposing company data
         working-directory: private
         env:
