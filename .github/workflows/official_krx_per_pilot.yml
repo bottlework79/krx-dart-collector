@@ -70,6 +70,9 @@ jobs:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           EV_DA_SAMPLE_INDEX: '4'
         run: python -m operations.ev_xbrl_smoke
+      - name: Inspect EV EBITDA inputs for two verified D&A candidates
+        working-directory: private
+        run: python -m operations.ev_ebitda_input_pilot
       - name: Calculate private PER with official KRX API
         working-directory: private
         env:
