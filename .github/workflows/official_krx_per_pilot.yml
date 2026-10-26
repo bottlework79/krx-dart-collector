@@ -1,5 +1,5 @@
 name: Official KRX Current PER Pilot
-# Read-only XBRL D&A unmatched-fact diagnostics pilot
+# Read-only XBRL D&A period and consolidation context audit
 on:
   workflow_dispatch:
   push:
