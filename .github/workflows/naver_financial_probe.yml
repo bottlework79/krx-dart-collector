@@ -24,3 +24,5 @@ jobs:
         run: |
           python3 -m unittest test.test_ev_ebitda_ttm -v
           python3 -u -m operations.ev_ebitda_ttm_source_audit
+
+# Re-run cash-flow depreciation source inventory
