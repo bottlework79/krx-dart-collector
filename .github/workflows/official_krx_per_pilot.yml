@@ -1,5 +1,5 @@
 name: Official KRX Current PER Pilot
-# Read-only XBRL D&A period and consolidation context audit
+# Read-only D&A source-specific validation classification
 on:
   workflow_dispatch:
   push:
