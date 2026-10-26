@@ -22,4 +22,5 @@ jobs:
       - name: Compare Naver reported EV EBITDA to reconstructed EV
         working-directory: private
         run: |
-          python3 -u -m operations.wisereport_probe
+          python3 -m unittest test.test_ev_ebitda_ttm -v
+          python3 -u -m operations.ev_ebitda_ttm_source_audit
