@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Calculate reconciled Samyang EV EBITDA pilot
+      - name: Compare Naver reported EV EBITDA to reconstructed EV
         working-directory: private
         run: |
-          EV_RECON_STATIC_CAP=1 python3 -u -m operations.ev_ebitda_approx_pilot
+          python3 -u -m operations.wisereport_probe
