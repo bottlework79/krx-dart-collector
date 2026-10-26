@@ -1,4 +1,5 @@
 name: Official KRX Current PER Pilot
+# Read-only XBRL D&A numeric crosscheck pilot
 on:
   workflow_dispatch:
   push:
