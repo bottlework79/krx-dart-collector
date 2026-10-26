@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install private DB dependencies
-        run: pip install pandas numpy
+        run: pip install pandas numpy lxml
       # Recheck expanded private DART coverage after verified batch import.
       - name: Validate source
         working-directory: private
@@ -38,7 +38,7 @@ jobs:
         env:
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
         run: python -m operations.current_other_multiples_pilot
-      # Parse XML parent and ancestor tags around KR Motors note 22 amount.
+      # Recover original DART XML and inspect ancestor tags around KR Motors note 22.
       - name: Smoke test one original XBRL filing without exposing company data
         working-directory: private
         env:
