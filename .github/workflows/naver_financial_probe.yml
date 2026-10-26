@@ -33,3 +33,5 @@ jobs:
         run: python3 -u -m operations.ev_da_three_period_audit
 
 # Re-run cash-flow depreciation source inventory
+
+# Diagnostic rerun with source error details
