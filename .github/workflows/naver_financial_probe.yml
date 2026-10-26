@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Test existing non-ajax WiseReport cF3002 endpoint
+      - name: Compare Samyang DART balance sheet with WiseReport
         working-directory: private
         run: |
           python3 -u -m operations.wisereport_probe
