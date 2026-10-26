@@ -74,6 +74,11 @@ jobs:
       - name: Inspect EV EBITDA inputs for two verified D&A candidates
         working-directory: private
         run: python -m operations.ev_ebitda_input_pilot
+      - name: Calculate approximate EV EBITDA for two sample stocks
+        working-directory: private
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+        run: python -m operations.ev_ebitda_approx_pilot
       - name: Calculate private PER with official KRX API
         working-directory: private
         env:
