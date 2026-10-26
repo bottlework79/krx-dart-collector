@@ -44,7 +44,7 @@ jobs:
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: python -m operations.ev_xbrl_smoke
-      # Independent second filing; corrected unit-regex D&A diagnostic check.
+      # Independent second filing; expanded cash-flow labels and period-header diagnostic.
       - name: Check second DART depreciation filing
         working-directory: private
         env:
