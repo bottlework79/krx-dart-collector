@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Inspect detailed WiseReport AJAX and retry endpoint
+      - name: Inspect WiseReport AJAX route definitions
         working-directory: private
         run: |
           python3 -u -m operations.wisereport_probe
