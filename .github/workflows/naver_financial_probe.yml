@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Identify remaining Samyang debt reconciliation differences
+      - name: Calculate reconciled Samyang EV EBITDA pilot
         working-directory: private
         run: |
-          python3 -u -m operations.wisereport_probe
+          python3 -u -m operations.ev_ebitda_approx_pilot
