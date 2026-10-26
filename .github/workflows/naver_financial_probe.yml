@@ -22,5 +22,4 @@ jobs:
       - name: Probe corrected Naver financial menu paths
         working-directory: private
         run: |
-          python3 -u -m operations.naver_financial_api_probe
           python3 -u -m operations.wisereport_probe
