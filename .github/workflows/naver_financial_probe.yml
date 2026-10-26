@@ -19,6 +19,6 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Probe Naver JSON only
+      - name: Probe corrected Naver financial menu paths
         working-directory: private
         run: python3 -u -m operations.naver_financial_api_probe
