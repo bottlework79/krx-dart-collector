@@ -113,6 +113,8 @@ jobs:
               print("OFFICIAL_KRX_HTTP_STATUS_"+k+"="+str(status[k]))
           for k in sorted(network):
               print("OFFICIAL_KRX_NETWORK_ERROR_"+k.upper()+"="+str(network[k]))
+          print("OFFICIAL_KRX_FIRST_HTTP_ERROR="+json.dumps(a.get("first_http_error"),ensure_ascii=False))
+          print("OFFICIAL_KRX_STOPPED_AFTER_FORBIDDEN="+str(a.get("stopped_after_forbidden")))
           print("OFFICIAL_KRX_ELIGIBLE="+str(d["openapi_eligible"]))
           print("OFFICIAL_KRX_MATCHED="+str(d["openapi_matched"]))
           print("OFFICIAL_KRX_PER_AVAILABLE="+str(r["per_available"]))
