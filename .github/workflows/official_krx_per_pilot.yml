@@ -38,7 +38,7 @@ jobs:
         env:
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
         run: python -m operations.current_other_multiples_pilot
-      # Smoke-test reusable read-only DART depreciation and amortization row extraction.
+      # Re-test corrected regex in read-only DART depreciation row extraction.
       - name: Smoke test one original XBRL filing without exposing company data
         working-directory: private
         env:
