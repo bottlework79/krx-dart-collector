@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Probe corrected Naver financial menu paths
+      - name: Inspect encparam assignment in WiseReport JavaScript
         working-directory: private
         run: |
           python3 -u -m operations.wisereport_probe
