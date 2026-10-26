@@ -35,3 +35,5 @@ jobs:
 # Re-run cash-flow depreciation source inventory
 
 # Diagnostic rerun with source error details
+
+# Inspect DART XML error status on non-ZIP response
