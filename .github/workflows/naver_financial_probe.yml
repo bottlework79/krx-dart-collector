@@ -1,0 +1,24 @@
+name: Naver Financial JSON Probe
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/naver_financial_probe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Checkout private project
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - name: Probe Naver JSON only
+        working-directory: private
+        run: python3 -u -m operations.naver_financial_api_probe
