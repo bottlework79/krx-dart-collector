@@ -74,6 +74,9 @@ jobs:
       - name: Inspect EV EBITDA inputs for two verified D&A candidates
         working-directory: private
         run: python -m operations.ev_ebitda_input_pilot
+      - name: Probe Naver financial JSON for Samyang net debt
+        working-directory: private
+        run: python -m operations.naver_financial_api_probe
       - name: Audit Samyang financial assets against Naver net debt
         working-directory: private
         env:
