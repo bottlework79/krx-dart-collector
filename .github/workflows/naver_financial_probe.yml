@@ -19,10 +19,17 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
+      - name: Install existing DART parser dependency
+        run: python3 -m pip install lxml
       - name: Compare Naver reported EV EBITDA to reconstructed EV
         working-directory: private
         run: |
           python3 -m unittest test.test_ev_ebitda_ttm -v
           python3 -u -m operations.ev_ebitda_ttm_source_audit
+      - name: Reuse existing original filing D&A parser for three periods
+        working-directory: private
+        env:
+          DART_API_KEY: \${{ secrets.DART_API_KEY }}
+        run: python3 -u -m operations.ev_da_three_period_audit
 
 # Re-run cash-flow depreciation source inventory
