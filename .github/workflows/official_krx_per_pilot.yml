@@ -51,6 +51,24 @@ jobs:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           EV_DA_SAMPLE_INDEX: '1'
         run: python -m operations.ev_xbrl_smoke
+      - name: Audit DART depreciation sample 3
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          EV_DA_SAMPLE_INDEX: '2'
+        run: python -m operations.ev_xbrl_smoke
+      - name: Audit DART depreciation sample 4
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          EV_DA_SAMPLE_INDEX: '3'
+        run: python -m operations.ev_xbrl_smoke
+      - name: Audit DART depreciation sample 5
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          EV_DA_SAMPLE_INDEX: '4'
+        run: python -m operations.ev_xbrl_smoke
       - name: Calculate private PER with official KRX API
         working-directory: private
         env:
