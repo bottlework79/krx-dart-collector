@@ -22,4 +22,4 @@ jobs:
       - name: Calculate reconciled Samyang EV EBITDA pilot
         working-directory: private
         run: |
-          python3 -u -m operations.ev_ebitda_approx_pilot
+          EV_RECON_STATIC_CAP=1 python3 -u -m operations.ev_ebitda_approx_pilot
