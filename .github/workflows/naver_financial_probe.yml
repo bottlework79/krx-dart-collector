@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: false
-      - name: Compare Samyang DART balance sheet with WiseReport
+      - name: Identify remaining Samyang debt reconciliation differences
         working-directory: private
         run: |
           python3 -u -m operations.wisereport_probe
