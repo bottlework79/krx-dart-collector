@@ -1,0 +1,1 @@
+Pilot request 2026-10-27: collect one company and verify private v2 import.
