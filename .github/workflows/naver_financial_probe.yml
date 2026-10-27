@@ -30,7 +30,7 @@ jobs:
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-        run: python3 -u -m operations.ev_da_three_period_audit # read-only combined D&A TTM calculation audit
+        run: python3 -u -m operations.ev_da_three_period_audit # read-only combined D&A TTM calculation audit; quarterly TTM unit tests
 
 # Re-run cash-flow depreciation source inventory
 
