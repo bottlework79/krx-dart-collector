@@ -145,10 +145,19 @@ jobs:
           python -m financial.build_dart_history --help > /dev/null
           python -m financial.validate_financial_db --help > /dev/null
       - name: Read-only one-company DART collection smoke test
-        if: false
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           DART_COLLECTION_DIR: ${{ runner.temp }}/financial-smoke
         run: |
-          python -m financial.collect_dart --batch-index 0 --batch-size 1 --workers 1 --start-year 2025 --end-year 2025 --universe-file data/financial_universe.json
+          python -m financial.collect_dart --batch-index 0 --batch-size 1 --workers 1 --start-year 2024 --end-year 2024 --universe-file data/financial_universe.json
           python -m financial.validate_financial_db --db "${DART_COLLECTION_DIR}/financial_statements.pkl.gz" --universe data/financial_universe.json
+
+          python - <<'PY'
+          import gzip, os, pickle
+          from pathlib import Path
+          p = Path(os.environ['DART_COLLECTION_DIR']) / 'financial_statements.pkl.gz'
+          with gzip.open(p, 'rb') as f: db = pickle.load(f)
+          assert db, 'No DART statements collected'
+          assert all(r['ticker'] == '000020' for r in db.values()), 'Unexpected company in smoke test'
+          print('DART_READ_ONLY_SMOKE_OK', len(db))
+          PY
