@@ -6,6 +6,11 @@ on:
       - '.github/dart-pilot-trigger.txt'
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: "Validate only; no production writes"
+        type: boolean
+        required: true
+        default: true
       batch_size:
         description: "New companies per run (1-25)"
         required: true
@@ -17,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   collect-and-import:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: (github.event_name == 'workflow_dispatch' && inputs.dry_run == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -98,6 +103,28 @@ jobs:
             git commit -m "Update DART imported coverage after Private v2 verification"
             git push origin HEAD:main
           fi
+
+  pipeline-dry-run:
+    if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout private financial code
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run isolated integration tests
+        run: |
+          python -m unittest test.test_merge_private_v2_isolation test.test_dart_pipeline_dry_run -v
+          python -m test.compare_real_dart_refactor
 
   validate-migration:
     if: github.event_name == 'push' && github.ref != 'refs/heads/main'
