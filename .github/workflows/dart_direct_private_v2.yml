@@ -47,6 +47,7 @@ jobs:
           python -m py_compile financial/*.py
           python -m unittest test.test_ev_ebitda_ttm test.test_financial_coverage_core test.test_parent_profit_view -v
           python -m test.compare_real_dart_refactor
+          python -m unittest test.test_merge_private_v2_isolation -v
           python - <<'PY'
           import importlib
           names = ['calculate_verified_parent_profit']
@@ -120,7 +121,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: test/real-dart-regression
+          ref: test/merge-private-v2-isolation
           fetch-depth: 0
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
