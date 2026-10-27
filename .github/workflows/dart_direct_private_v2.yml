@@ -125,3 +125,10 @@ jobs:
           python -m financial.merge_private_v2 --help > /dev/null
           python -m financial.build_dart_history --help > /dev/null
           python -m financial.validate_financial_db --help > /dev/null
+      - name: Read-only one-company DART collection smoke test
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          DART_COLLECTION_DIR: ${{ runner.temp }}/financial-smoke
+        run: |
+          python -m financial.collect_dart --batch-index 0 --batch-size 1 --workers 1 --start-year 2025 --end-year 2025 --universe-file data/financial_universe.json
+          python -m financial.validate_financial_db --db "${DART_COLLECTION_DIR}/financial_statements.pkl.gz" --universe data/financial_universe.json
