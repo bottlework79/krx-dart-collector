@@ -1,5 +1,9 @@
 name: DART Direct Private V2 Pilot
 on:
+  push:
+    branches: [refactor/private-financial-data-package]
+    paths:
+      - '.github/workflows/dart_direct_private_v2.yml'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -13,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   collect-and-import:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -93,3 +98,30 @@ jobs:
             git commit -m "Update DART imported coverage after Private v2 verification"
             git push origin HEAD:main
           fi
+
+  validate-migration:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private financial package migration branch
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: refactor/private-financial-data-package
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install requests lxml
+      - name: Validate private financial modules
+        run: |
+          python -m compileall -q financial
+          python -m unittest test.test_ev_ebitda_ttm -v
+          python -m financial.collect_dart --help > /dev/null
+          python -m financial.select_history_batch --help > /dev/null
+          python -m financial.merge_private_v2 --help > /dev/null
+          python -m financial.build_dart_history --help > /dev/null
+          python -m financial.validate_financial_db --help > /dev/null
