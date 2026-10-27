@@ -6,6 +6,11 @@ on:
       - '.github/dart-pilot-trigger.txt'
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: "Validate only; no production writes"
+        type: boolean
+        required: true
+        default: true
       batch_size:
         description: "New companies per run (1-25)"
         required: true
@@ -17,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   collect-and-import:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: (github.event_name == 'workflow_dispatch' && inputs.dry_run == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
