@@ -135,6 +135,7 @@ jobs:
           python -m compileall -q financial operations research/financial
           python -m unittest test.test_ev_ebitda_ttm test.test_financial_coverage_core test.test_parent_profit_view -v
           python -m test.compare_real_dart_refactor
+          python -m unittest test.test_merge_private_v2_isolation -v
           python - <<'PY'
           from operations.calculate_verified_parent_profit import build_view as old
           from financial.parent_profit_view import build_view as new
