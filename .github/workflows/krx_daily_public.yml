@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           started=$SECONDS
-          if python -c 'from data_manager import load_or_update_master_database; load_or_update_master_database()' > /tmp/krx_private_update.log 2>&1; then
+          if python -m collectors.price.collect_price > /tmp/krx_private_update.log 2>&1; then
             echo "KRX_PRICE_UPDATE=SUCCESS duration_seconds=$((SECONDS-started))"
           else
             echo "::error::KRX_PRICE_UPDATE=FAILED duration_seconds=$((SECONDS-started))"
