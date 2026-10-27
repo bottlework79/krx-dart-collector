@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           started=$SECONDS
-          if python -c 'from data_manager import get_recent_database; from screener import run_screening; import pandas as pd; master=pd.read_pickle("data/market_1250.pkl.gz", compression="gzip"); run_screening(get_recent_database(master), master_database=master)' > /tmp/krx_private_patterns.log 2>&1; then
+          if python -c 'from config import KEEP_DAYS, LONG_DATA_FILE; from screener import run_screening; import pandas as pd; master=pd.read_pickle(LONG_DATA_FILE, compression="gzip"); recent=master.sort_values(["Code", "Date"]).groupby("Code", group_keys=False).tail(KEEP_DAYS).reset_index(drop=True); run_screening(recent, master_database=master)' > /tmp/krx_private_patterns.log 2>&1; then
             echo "KRX_PATTERN_ANALYSIS=SUCCESS duration_seconds=$((SECONDS-started))"
           else
             echo "::error::KRX_PATTERN_ANALYSIS=FAILED duration_seconds=$((SECONDS-started))"
