@@ -1,9 +1,9 @@
 name: DART Direct Private V2 Pilot
 on:
   push:
-    branches: [refactor/private-financial-data-package]
+    branches: [main]
     paths:
-      - '.github/workflows/dart_direct_private_v2.yml'
+      - '.github/dart-pilot-trigger.txt'
   workflow_dispatch:
     inputs:
       batch_size:
@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   collect-and-import:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -50,7 +50,7 @@ jobs:
         env:
           DART_COLLECTION_DIR: ../scratch
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-          BATCH_SIZE: ${{ inputs.batch_size }}
+          BATCH_SIZE: ${{ inputs.batch_size || '1' }}
         run: |
           set -euo pipefail
           if ! [[ "$BATCH_SIZE" =~ ^[0-9]+$ ]] || [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
@@ -100,7 +100,7 @@ jobs:
           fi
 
   validate-migration:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
