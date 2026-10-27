@@ -121,7 +121,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: test/dart-pipeline-dry-run
+          ref: feature/dart-ofs-fallback
           fetch-depth: 0
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
