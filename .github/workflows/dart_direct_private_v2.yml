@@ -32,16 +32,17 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        working-directory: public
-        run: pip install -r requirements.txt
+        working-directory: private
+        run: python -m pip install 'requests>=2.31,<3'
       - name: Verify scripts
-        working-directory: public
+        working-directory: private
         run: |
-          python -m py_compile collect_dart.py select_history_batch.py merge_private_v2.py build_dart_history.py
-          python tests/test_missing_cache_static.py
+          python -m py_compile financial_data/*.py
+          python -m unittest test.test_ev_ebitda_ttm -v
       - name: Select and collect unimported reports
-        working-directory: public
+        working-directory: private
         env:
+          DART_COLLECTION_DIR: ../scratch
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           BATCH_SIZE: ${{ inputs.batch_size }}
         run: |
@@ -49,15 +50,15 @@ jobs:
           if ! [[ "$BATCH_SIZE" =~ ^[0-9]+$ ]] || [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
             echo "Invalid batch size"; exit 1
           fi
-          python select_history_batch.py --batch-size "$BATCH_SIZE" > /tmp/dart_v2_selection.log
+          python -m financial_data.select_history_batch --batch-size "$BATCH_SIZE" --universe ../public/data/krx_universe.json --history ../public/data/dart_collection_history.json > /tmp/dart_v2_selection.log
           # Selection output contains only aggregate batch metadata.
           BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/dart_v2_selection.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
-          python collect_dart.py --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 3 --history-file data/dart_collection_history.json
-          python validate_financial_db.py
+          python -m financial_data.collect_dart --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 3 --universe-file ../public/data/krx_universe.json --history-file ../public/data/dart_collection_history.json
+          python -m financial_data.validate_financial_db --db ../scratch/financial_statements.pkl.gz --universe ../public/data/financial_universe.json
       - name: Merge fresh batch into Private v2
-        working-directory: public
+        working-directory: private
         run: |
-          python merge_private_v2.py --batch data/financial_statements.pkl.gz --private-db ../private/data/financial_statements_v2.pkl.gz
+          python -m financial_data.merge_private_v2 --batch ../scratch/financial_statements.pkl.gz --private-db data/financial_statements_v2.pkl.gz --universe ../public/data/krx_universe.json
       - name: Commit verified Private v2 data
         working-directory: private
         run: |
@@ -70,13 +71,13 @@ jobs:
             git push origin HEAD:main
           fi
       - name: Rebuild public metadata only after Private push
-        working-directory: public
+        working-directory: private
         run: |
-          python build_dart_history.py --private-db ../private/data/financial_statements_v2.pkl.gz
+          python -m financial_data.build_dart_history --private-db data/financial_statements_v2.pkl.gz --missing ../scratch/unavailable_periods.json --universe ../public/data/krx_universe.json --output ../public/data/dart_collection_history.json
           python - <<'PY'
           import json
           from pathlib import Path
-          h=json.loads(Path("data/dart_collection_history.json").read_text())
+          h=json.loads(Path("../public/data/dart_collection_history.json").read_text())
           assert all(v["status"] in ("imported","unavailable") for v in h["entries"].values())
           print("PUBLIC_HISTORY_ENTRIES",len(h["entries"]))
           PY
