@@ -30,7 +30,7 @@ jobs:
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-        run: python3 -u -m operations.ev_da_three_period_audit # six-column segment D&A arithmetic extraction
+        run: python3 -u -m operations.ev_da_three_period_audit # corrected regex segment D&A extraction
 
 # Re-run cash-flow depreciation source inventory
 
