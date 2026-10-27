@@ -30,7 +30,7 @@ jobs:
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
-        run: python3 -u -m operations.ev_da_three_period_audit # segment D&A row extraction without TABLE ancestor
+        run: python3 -u -m operations.ev_da_three_period_audit # segment D&A independent row arithmetic probe
 
 # Re-run cash-flow depreciation source inventory
 
