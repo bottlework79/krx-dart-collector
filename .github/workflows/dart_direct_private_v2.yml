@@ -46,6 +46,7 @@ jobs:
         run: |
           python -m py_compile financial/*.py
           python -m unittest test.test_ev_ebitda_ttm test.test_financial_coverage_core test.test_parent_profit_view -v
+          python -m test.compare_real_dart_refactor
           python - <<'PY'
           import importlib
           names = ['calculate_verified_parent_profit']
@@ -119,7 +120,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: refactor/parent-profit-view-core
+          ref: test/real-dart-regression
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
