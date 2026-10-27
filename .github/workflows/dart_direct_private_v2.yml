@@ -116,6 +116,7 @@ jobs:
         with:
           repository: bottlework79/krx-stock-data
           ref: main
+          fetch-depth: 0
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
