@@ -37,7 +37,7 @@ jobs:
       - name: Verify scripts
         working-directory: private
         run: |
-          python -m py_compile financial_data/*.py
+          python -m py_compile financial/*.py
           python -m unittest test.test_ev_ebitda_ttm -v
       - name: Select and collect unimported reports
         working-directory: private
@@ -50,15 +50,15 @@ jobs:
           if ! [[ "$BATCH_SIZE" =~ ^[0-9]+$ ]] || [ "$BATCH_SIZE" -lt 1 ] || [ "$BATCH_SIZE" -gt 25 ]; then
             echo "Invalid batch size"; exit 1
           fi
-          python -m financial_data.select_history_batch --batch-size "$BATCH_SIZE" --universe ../public/data/krx_universe.json --history ../public/data/dart_collection_history.json > /tmp/dart_v2_selection.log
+          python -m financial.select_history_batch --batch-size "$BATCH_SIZE" --universe ../public/data/krx_universe.json --history ../public/data/dart_collection_history.json > /tmp/dart_v2_selection.log
           # Selection output contains only aggregate batch metadata.
           BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/dart_v2_selection.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
-          python -m financial_data.collect_dart --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 3 --universe-file ../public/data/krx_universe.json --history-file ../public/data/dart_collection_history.json
-          python -m financial_data.validate_financial_db --db ../scratch/financial_statements.pkl.gz --universe ../public/data/financial_universe.json
+          python -m financial.collect_dart --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 3 --universe-file ../public/data/krx_universe.json --history-file ../public/data/dart_collection_history.json
+          python -m financial.validate_financial_db --db ../scratch/financial_statements.pkl.gz --universe ../public/data/financial_universe.json
       - name: Merge fresh batch into Private v2
         working-directory: private
         run: |
-          python -m financial_data.merge_private_v2 --batch ../scratch/financial_statements.pkl.gz --private-db data/financial_statements_v2.pkl.gz --universe ../public/data/krx_universe.json
+          python -m financial.merge_private_v2 --batch ../scratch/financial_statements.pkl.gz --private-db data/financial_statements_v2.pkl.gz --universe ../public/data/krx_universe.json
       - name: Commit verified Private v2 data
         working-directory: private
         run: |
@@ -73,7 +73,7 @@ jobs:
       - name: Rebuild public metadata only after Private push
         working-directory: private
         run: |
-          python -m financial_data.build_dart_history --private-db data/financial_statements_v2.pkl.gz --missing ../scratch/unavailable_periods.json --universe ../public/data/krx_universe.json --output ../public/data/dart_collection_history.json
+          python -m financial.build_dart_history --private-db data/financial_statements_v2.pkl.gz --missing ../scratch/unavailable_periods.json --universe ../public/data/krx_universe.json --output ../public/data/dart_collection_history.json
           python - <<'PY'
           import json
           from pathlib import Path
