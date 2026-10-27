@@ -28,6 +28,7 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
           persist-credentials: true
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -54,7 +55,7 @@ jobs:
           # Selection output contains only aggregate batch metadata.
           BATCH_INDEX="$(python -c 'import json; print(json.loads(open("/tmp/dart_v2_selection.log").read().split("AUTO_DART_BATCH=")[1])["batch_index"])')"
           python -m financial.collect_dart --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE" --workers 3 --universe-file ../public/data/krx_universe.json --history-file ../public/data/dart_collection_history.json
-          python -m financial.validate_financial_db --db ../scratch/financial_statements.pkl.gz --universe ../public/data/financial_universe.json
+          python -m financial.validate_financial_db --db ../scratch/financial_statements.pkl.gz --universe ../public/data/krx_universe.json
       - name: Merge fresh batch into Private v2
         working-directory: private
         run: |
