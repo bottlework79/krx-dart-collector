@@ -46,6 +46,7 @@ jobs:
         run: |
           python -m py_compile financial/*.py
           python -m unittest test.test_ev_ebitda_ttm -v
+          python -c 'import operations.current_other_multiples_pilot, operations.financial_score_fnguide_pilot; from research.financial import current_other_multiples_pilot, financial_score_fnguide_pilot; assert callable(current_other_multiples_pilot.main) and callable(financial_score_fnguide_pilot.main)'
       - name: Select and collect unimported reports
         working-directory: private
         env:
@@ -109,7 +110,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: refactor/consolidate-financial-operations
+          ref: refactor/financial-research-pilots-phase2
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -119,7 +120,7 @@ jobs:
         run: python -m pip install requests lxml
       - name: Validate private financial modules
         run: |
-          python -m compileall -q financial operations/ev_ebitda_ttm.py operations/ev_ebitda_approx_pilot.py operations/ev_ebitda_input_pilot.py research/financial
+          python -m compileall -q financial operations/ev_ebitda_ttm.py operations/ev_ebitda_approx_pilot.py operations/ev_ebitda_input_pilot.py operations/current_other_multiples_pilot.py operations/financial_score_fnguide_pilot.py research/financial
           python -m unittest test.test_ev_ebitda_ttm -v
           python -m financial.collect_dart --help > /dev/null
           python -m financial.select_history_batch --help > /dev/null
