@@ -15,7 +15,7 @@ The collector is **manual only**. Verification runs automatically on pushes to i
 
 ## Data flow
 
-1. Collection uses `collect_dart.py`, `select_history_batch.py`, `merge_private_v2.py`, and `build_dart_history.py`.
+1. Collection runs the private `krx-stock-data/financial/` package (`financial.collect_dart`, `financial.select_history_batch`, `financial.merge_private_v2`, and `financial.build_dart_history`) via `.github/workflows/dart_direct_private_v2.yml`.
 2. The public runner temporarily checks out private `krx-stock-data` with `PRIVATE_REPO_TOKEN`. It saves collected statements to the **private** v2 database and writes only collection *metadata* to this public repository.
 3. Verification separately uses `verify_private_dart.py`: it temporarily checks out the same private repository and runs its existing `operations/` auditors. Only aggregate statuses and pass/fail stage names reach the **public** job log.
 4. Existing raw DB, stock-price DB, scoring and technical screener remain private. The verification workflow never edits the DB or uploads private data as artifacts.
