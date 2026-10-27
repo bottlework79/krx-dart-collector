@@ -3,6 +3,17 @@ name: KRX Price Collection (Public Runner)
 # Run private KRX code on public Actions minutes, keep data and results private.
 on:
   workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '종목코드 (예: 005930, 비우면 전체 DB 갱신)'
+        required: false
+        type: string
+        default: ''
+      days:
+        description: '단일 종목 조회 기간 (달력일)'
+        required: false
+        type: number
+        default: 45
   schedule:
     # Weekdays 16:30 KST (07:30 UTC), same as previous private workflow.
     - cron: '30 7 * * 1-5'
@@ -42,20 +53,30 @@ jobs:
           test -f private/collectors/price/collect_price.py
           test -f private/data/market_1250.pkl.gz
           python -m py_compile private/collectors/price/collect_price.py
-      - name: Update private price DB
+      - name: Collect stock prices
         id: price_update
         working-directory: private
         shell: bash
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          DAYS: ${{ inputs.days }}
         run: |
-          started=$SECONDS
-          if python -m collectors.price.collect_price > /tmp/krx_private_update.log 2>&1; then
-            echo "KRX_PRICE_UPDATE=SUCCESS duration_seconds=$((SECONDS-started))"
+          set -euo pipefail
+          if [[ -n "${STOCK_CODE}" ]]; then
+            if [[ ! "${STOCK_CODE}" =~ ^[0-9]{6}$ ]]; then
+              echo "::error::Stock code must be exactly six digits"
+              exit 1
+            fi
+            if [[ ! "${DAYS}" =~ ^[0-9]+$ ]] || (( DAYS < 1 )); then
+              echo "::error::Days must be a positive integer"
+              exit 1
+            fi
+            python -m collectors.price.collect_price --code "${STOCK_CODE}" --days "${DAYS}"
           else
-            echo "::error::KRX_PRICE_UPDATE=FAILED duration_seconds=$((SECONDS-started))"
-            exit 1
+            python -m collectors.price.collect_price
           fi
       - name: Commit changed private master DB
-        if: always()
+        if: ${{ success() && inputs.stock_code == '' }}
         working-directory: private
         shell: bash
         run: |
