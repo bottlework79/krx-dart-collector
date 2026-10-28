@@ -9,6 +9,11 @@ on:
         required: false
         type: string
         default: ''
+      trading_days:
+        description: '전체 신규 수집 시 거래일 수 (1~1250, 기본 1250)'
+        required: false
+        type: number
+        default: 1250
       days:
         description: '단일 종목 조회 기간 (달력일)'
         required: false
@@ -60,6 +65,7 @@ jobs:
         env:
           STOCK_CODE: ${{ inputs.stock_code }}
           DAYS: ${{ inputs.days }}
+          TRADING_DAYS: ${{ inputs.trading_days }}
         run: |
           set -euo pipefail
           if [[ -n "${STOCK_CODE}" ]]; then
@@ -73,7 +79,7 @@ jobs:
             fi
             python -m collectors.price.collect_price --code "${STOCK_CODE}" --days "${DAYS}"
           else
-            python -m collectors.price.collect_price
+            python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-1250}"
           fi
       - name: Commit changed private master DB
         if: ${{ success() && inputs.stock_code == '' }}
