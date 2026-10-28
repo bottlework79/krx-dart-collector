@@ -30,7 +30,7 @@ jobs:
           python-version: '3.11'
       - name: Run offline smoke tests
         working-directory: private
-        run: python -m unittest research.financial.test_smoke -v
+        run: python -m unittest validation.financials.test_smoke -v
       - name: Install pandas for price DB inspection
         run: python -m pip install pandas
       - name: Verify financial database and calculations
