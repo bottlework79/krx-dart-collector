@@ -2,6 +2,12 @@ name: Verify Private DART Financial Calculations
 
 on:
   workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '검증할 종목코드 6자리'
+        required: true
+        type: string
+        default: '005930'
 
 permissions:
   contents: read
@@ -27,12 +33,22 @@ jobs:
         run: python -m unittest research.financial.test_smoke -v
       - name: Verify financial database and calculations
         working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
         run: |
           python - <<'PY'
+          import os
           from collections import Counter
           from analysis.financials.db_adapter import load_database, compute_owner_ttm, latest_annual_payloads, annual_ratios
           from analysis.financials.parent_profit_view import build_view
-          db = load_database()
+          code = os.environ['STOCK_CODE'].strip()
+          if len(code) != 6 or not code.isdigit():
+              raise SystemExit('Invalid stock code: require six digits')
+          full_db = load_database()
+          db = {k:v for k,v in full_db.items() if str(v.get('ticker','')).zfill(6) == code}
+          if not db:
+              raise SystemExit(f'No DART data for stock {code}; collect it first')
+          print('Selected ticker:', code)
           print("DB records:", len(db))
           print("Tickers:", len({str(v['ticker']).zfill(6) for v in db.values()}))
           print("Years:", dict(sorted(Counter(str(v['year']) for v in db.values()).items())))
