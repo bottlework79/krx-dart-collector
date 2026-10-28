@@ -1,4 +1,4 @@
-name: Trend Reversal Screening
+name: Trend Reversal and Weinstein Screening
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "$STOCK_CODE" ]]; then
-            python -m analysis.trends.trend_reversal --code "$STOCK_CODE"
+            python -m analysis.trends.combined --code "$STOCK_CODE"
           else
-            python -m analysis.trends.trend_reversal
+            python -m analysis.trends.combined
           fi
