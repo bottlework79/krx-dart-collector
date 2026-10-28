@@ -51,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "$STOCK_CODE" ]]; then
-            python -m analysis.trends.run --indicator "$INDICATOR" --code "$STOCK_CODE"
+            python -m analysis.indicators.run --indicator "$INDICATOR" --code "$STOCK_CODE"
           else
-            python -m analysis.trends.run --indicator "$INDICATOR"
+            python -m analysis.indicators.run --indicator "$INDICATOR"
           fi
