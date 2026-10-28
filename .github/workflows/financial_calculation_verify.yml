@@ -60,7 +60,16 @@ jobs:
           print("TTM periods:", len(ttm))
           print("TTM statuses:", dict(Counter(v['status'] for v in ttm)))
           latest = latest_annual_payloads(db)
-          results = [annual_ratios(p) for p in latest.values()]
+          results = []
+          for payload in latest.values():
+              prior = next((v for v in db.values() if v.get('ticker') == payload.get('ticker')
+                            and v.get('report') == 'annual'
+                            and int(v.get('year')) == int(payload.get('year')) - 1
+                            and v.get('fs_div') == payload.get('fs_div')), None)
+              results.append(annual_ratios(payload, prior_annual=prior))
+              print('Prior annual matched:', prior is not None)
+              from analysis.financials.db_adapter import unique_amount
+              print('Income fields present:', {k: unique_amount(payload, k) is not None for k in ('parent_net_income', 'net_income')})
           print("Annual ratio eligible tickers:", len(results))
           for key in ("ROE", "ROA", "debt_ratio", "current_ratio"):
               print(key, "available:", sum(v[key] is not None for v in results))
