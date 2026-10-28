@@ -1,0 +1,84 @@
+name: Validate KRX Market Cap and DART Valuation
+
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: 'Six-digit ticker'
+        required: true
+        default: '007860'
+        type: string
+      market_date:
+        description: 'KRX trading date YYYY-MM-DD (blank: latest stored price date)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install pandas pykrx
+      - name: Offline market cap tests
+        working-directory: private
+        run: python -m unittest validation.prices.test_krx_market_cap validation.financials.test_smoke -v
+      - name: Fetch KRX cap and calculate read-only current PER/PBR
+        working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          MARKET_DATE: ${{ inputs.market_date }}
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import os
+          import pandas as pd
+          from analysis.financials.db_adapter import load_database, latest_annual_payloads, annual_ratios, compute_owner_ttm
+          from analysis.financials.current_per import latest_verified_snapshot, attach_current_market_caps
+          from collectors.price.krx_market_cap import fetch_market_caps
+
+          code = os.environ['STOCK_CODE'].strip()
+          if len(code) != 6 or not code.isdigit():
+              raise SystemExit('Invalid six-digit stock code')
+          raw_date = os.environ['MARKET_DATE'].strip()
+          if raw_date:
+              market_date = dt.date.fromisoformat(raw_date)
+          else:
+              prices = pd.read_pickle('data/market_1250.pkl.gz', compression='gzip')
+              matched = prices[prices['Code'].astype(str).str.zfill(6) == code]
+              if matched.empty:
+                  raise SystemExit('No stored price data for selected ticker')
+              market_date = pd.Timestamp(matched['Date'].max()).date()
+          print('Ticker:', code, 'KRX requested trading date:', market_date)
+          caps = fetch_market_caps(market_date, tickers=[code])
+          quote = caps[0]
+          print('KRX cap:', quote)
+          db = {k:v for k,v in load_database().items() if str(v['ticker']).zfill(6) == code}
+          if not db:
+              raise SystemExit('No DART data for selected ticker')
+          annual = latest_annual_payloads(db).get(code)
+          if annual:
+              prior = next((v for v in db.values() if v.get('report') == 'annual'
+                            and v.get('year') == annual['year'] - 1
+                            and v.get('fs_div') == annual['fs_div']), None)
+              ratios = annual_ratios(annual, prior_annual=prior, market_cap_krw=quote['market_cap_krw'])
+              print('Annual PBR:', ratios['PBR'], 'ROE:', ratios['ROE'], 'ROA:', ratios['ROA'])
+          snapshot = latest_verified_snapshot(compute_owner_ttm(db), asof=market_date)
+          valuation = attach_current_market_caps(snapshot, [quote], asof=market_date, max_quote_age_days=0)
+          print('Current PER TTM snapshot:', valuation)
+          if not valuation:
+              raise SystemExit('No eligible TTM snapshot')
+          PY
