@@ -31,6 +31,8 @@ jobs:
       - name: Run offline smoke tests
         working-directory: private
         run: python -m unittest research.financial.test_smoke -v
+      - name: Install pandas for price DB inspection
+        run: python -m pip install pandas
       - name: Verify financial database and calculations
         working-directory: private
         env:
@@ -74,6 +76,22 @@ jobs:
           for key in ("ROE", "ROA", "debt_ratio", "current_ratio"):
               print(key, "available:", sum(v[key] is not None for v in results))
           print("PBR withheld without dated market cap:", all(v["PBR"] is None for v in results))
+          import pandas as pd
+          from pathlib import Path
+          price_path = Path('data/market_1250.pkl.gz')
+          if price_path.exists():
+              prices = pd.read_pickle(price_path, compression='gzip')
+              print('Price DB columns:', list(prices.columns))
+              if 'Code' in prices.columns:
+                  matched = prices[prices['Code'].astype(str).str.zfill(6) == code]
+                  print('Selected ticker price rows:', len(matched))
+                  if not matched.empty and {'Date','Close'}.issubset(matched.columns):
+                      last = matched.sort_values('Date').iloc[-1]
+                      print('Latest close:', str(last['Date']), str(last['Close']))
+                  print('Explicit market cap column present:', any(x in prices.columns for x in ('MarketCap','Marcap','market_cap_krw')))
+          else:
+              print('Price DB not found')
+          print('PBR/PER require verified dated KRX market cap; Close alone is insufficient')
           for row in sorted(results, key=lambda x: x["ticker"])[:5]:
               print("SAMPLE:", {k: str(v) if v is not None else None for k,v in row.items()})
           PY
