@@ -1,0 +1,54 @@
+name: Verify Private DART Financial Calculations
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout private source and DB
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run offline smoke tests
+        working-directory: private
+        run: python -m unittest research.financial.test_smoke -v
+      - name: Verify financial database and calculations
+        working-directory: private
+        run: |
+          python - <<'PY'
+          from collections import Counter
+          from analysis.financials.db_adapter import load_database, compute_owner_ttm, latest_annual_payloads, annual_ratios
+          from analysis.financials.parent_profit_view import build_view
+          db = load_database()
+          print("DB records:", len(db))
+          print("Tickers:", len({str(v['ticker']).zfill(6) for v in db.values()}))
+          print("Years:", dict(sorted(Counter(str(v['year']) for v in db.values()).items())))
+          print("Reports:", dict(Counter(v['report'] for v in db.values())))
+          print("Scopes:", dict(Counter(v['fs_div'] for v in db.values())))
+          annual = build_view(db)
+          print("Annual parent statuses:", dict(Counter(v['status'] for v in annual)))
+          ttm = compute_owner_ttm(db)
+          print("TTM periods:", len(ttm))
+          print("TTM statuses:", dict(Counter(v['status'] for v in ttm)))
+          latest = latest_annual_payloads(db)
+          results = [annual_ratios(p) for p in latest.values()]
+          print("Annual ratio eligible tickers:", len(results))
+          for key in ("ROE", "ROA", "debt_ratio", "current_ratio"):
+              print(key, "available:", sum(v[key] is not None for v in results))
+          print("PBR withheld without dated market cap:", all(v["PBR"] is None for v in results))
+          for row in sorted(results, key=lambda x: x["ticker"])[:5]:
+              print("SAMPLE:", {k: str(v) if v is not None else None for k,v in row.items()})
+          PY
