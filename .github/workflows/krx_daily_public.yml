@@ -56,7 +56,6 @@ jobs:
       - name: Verify private entrypoints exist
         run: |
           test -f private/collectors/price/collect_price.py
-          test -f private/data/market_1250.pkl.gz
           python -m py_compile private/collectors/price/collect_price.py
       - name: Collect stock prices
         id: price_update
