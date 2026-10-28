@@ -52,7 +52,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install stock dependencies
-        run: python -m pip install finance-datareader pandas numpy pykrx
+        run: python -m pip install finance-datareader pandas numpy requests
       - name: Verify private entrypoints exist
         run: |
           test -f private/collectors/price/collect_price.py
@@ -62,6 +62,7 @@ jobs:
         working-directory: private
         shell: bash
         env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
           STOCK_CODE: ${{ inputs.stock_code }}
           DAYS: ${{ inputs.days }}
           TRADING_DAYS: ${{ inputs.trading_days }}
@@ -76,7 +77,7 @@ jobs:
               echo "::error::Days must be a positive integer"
               exit 1
             fi
-            python -m collectors.price.collect_price --code "${STOCK_CODE}" --days "${DAYS}"
+            python -m collectors.price.collect_price --code "${STOCK_CODE}" --trading-days "${TRADING_DAYS:-1}"
           else
             python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-1250}"
           fi
