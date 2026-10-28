@@ -1,0 +1,67 @@
+name: Collect KRX Market Capitalization (Private DB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      market_date:
+        description: 'KRX trading date YYYY-MM-DD (blank: previous calendar day)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-market-cap-private-db
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install KRX dependencies
+        run: python -m pip install pandas pykrx
+      - name: Offline validation
+        working-directory: private
+        run: python -m unittest validation.prices.test_krx_market_cap -v
+      - name: Fetch KRX market caps and update private DB
+        working-directory: private
+        env:
+          MARKET_DATE: ${{ inputs.market_date }}
+        run: |
+          if [ -n "$MARKET_DATE" ]; then
+            python -m collectors.price.collect_market_cap --date "$MARKET_DATE"
+          else
+            python -m collectors.price.collect_market_cap
+          fi
+      - name: Commit private market-cap DB only
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/market_cap.pkl.gz
+          if git diff --cached --quiet; then
+            echo "No market-cap DB change"
+            exit 0
+          fi
+          git commit -m "Update KRX dated market capitalization DB"
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo "::error::Rebase conflict; private DB unchanged on remote"
+            exit 1
+          fi
+          git push origin HEAD:main
