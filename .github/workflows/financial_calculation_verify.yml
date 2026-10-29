@@ -66,6 +66,15 @@ jobs:
                   body=response.read(32*1024*1024+1)
               candidates=extract_candidates(body)
               matched=[c for c in candidates if c.get('arithmetic_reconciled')]
+              from collections import Counter
+              print('ORIGINAL_DA_DIAGNOSTIC',json.dumps({
+                  'year':year,'report':report,
+                  'candidate_kinds':dict(Counter(c['kind'] for c in candidates)),
+                  'combined_samples':[{'value':c['value_as_printed'],
+                     'column':c['column_index'],'unit':c['unit_hint'],
+                     'scope':c['scope_hint'],'file':c['source_file']}
+                     for c in candidates if c['kind']=='combined_da'][:8]
+              },ensure_ascii=False))
               print('ORIGINAL_DA',json.dumps({'year':year,'report':report,'candidate_count':len(matched),
                   'sample':[{'amount':c['value_as_printed'],'unit_hint':c['unit_hint'],
                              'scope_hint':c['scope_hint'],'file':c['source_file']}
