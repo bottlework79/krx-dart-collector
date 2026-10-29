@@ -144,6 +144,9 @@ jobs:
                   print('EV AUDIT account:', r.get('sj_div'),r.get('account_id'),
                         r.get('account_nm'),r.get('thstrm_amount'))
               print('EV AUDIT matched account count:',len(hits))
+          from analysis.financials.ev_ebitda_ttm import audited_ev_inputs_from_database
+          ev_audit = audited_ev_inputs_from_database(db, code, locals().get('cap'))
+          print('EV INPUTS CONNECTED:', {k: ({a: str(b) if b is not None else None for a,b in v.items()} if k == 'inputs' else v) for k,v in ev_audit.items()})
           print('EV AUDIT calculation withheld until all debt, leases, NCI, cash and D&A are verified without double counting')
           for row in sorted(results, key=lambda x: x["ticker"])[:5]:
               print("SAMPLE:", {k: str(v) if v is not None else None for k,v in row.items()})
