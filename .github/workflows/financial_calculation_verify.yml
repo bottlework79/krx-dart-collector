@@ -100,6 +100,15 @@ jobs:
               tagged = [c for c in candidates if c['kind'] in
                         ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
               if year == 2026 and report == 'half':
+                  for filename, raw in original_zip_texts(body):
+                      for amount in ('12,336,543', '12,307,206', '29,337'):
+                          matches = list(re.finditer(re.escape(amount), raw))
+                          print('BUILDING_DEPRECIATION_CONTEXT', json.dumps({
+                              'file': filename, 'amount': amount, 'count': len(matches),
+                              'samples': [raw[max(0, m.start()-250):m.end()+250]
+                                          for m in matches[:3]]
+                          }, ensure_ascii=False))
+              if year == 2026 and report == 'half':
                   # Compare every row of the PPE movement table to the
                   # same-period consolidated XBRL asset-class facts.
                   from analysis.financials.dart_original_extractor import TableParser, original_zip_texts
