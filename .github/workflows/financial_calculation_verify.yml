@@ -100,6 +100,7 @@ jobs:
               tagged = [c for c in candidates if c['kind'] in
                         ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
               if year == 2026 and report == 'half':
+                  from analysis.financials.dart_original_extractor import original_zip_texts
                   for filename, raw in original_zip_texts(body):
                       for amount in ('12,336,543', '12,307,206', '29,337'):
                           matches = list(re.finditer(re.escape(amount), raw))
