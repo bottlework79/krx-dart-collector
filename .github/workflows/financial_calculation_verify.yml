@@ -88,6 +88,15 @@ jobs:
               candidates=extract_candidates(body)
               matched=[c for c in candidates if c.get('arithmetic_reconciled')]
               from collections import Counter
+              diagnostic_rows = [c for c in candidates if c['kind'] == 'asset_movement_total_diagnostic']
+              print('ORIGINAL_INTANGIBLE_STRUCTURE',json.dumps({
+                  'year':year,'report':report,'count':len(diagnostic_rows),
+                  'samples':[{
+                      'file':c['source_file'],'table':c['table_index'],
+                      'row':c['row_index'],'headers':c['header_cells'],
+                      'total':c['row_cells']
+                  } for c in diagnostic_rows[:12]]
+              },ensure_ascii=False))
               print('ORIGINAL_DA_SECTIONS',json.dumps({
                   'year':year,'report':report,
                   'sections':dict(Counter(
