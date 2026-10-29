@@ -99,6 +99,21 @@ jobs:
               },ensure_ascii=False))
               tagged = [c for c in candidates if c['kind'] in
                         ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
+              if year == 2026 and report == 'half':
+                  ppe = [c for c in tagged if c['kind']=='ppe_xbrl_depreciation'
+                         and c['period_context']=='CFY2026dHYA']
+                  print('ORIGINAL_PPE_XBRL_RECONCILIATION',json.dumps({
+                      'year':year,'report':report,
+                      'all_current_ppe_contexts':[{
+                          'amount':c['value_as_printed'],
+                          'context':c['xbrl_context'][:400],
+                          'decimal':c['decimal_attribute'],
+                          'total':c['total_context_candidate']
+                      } for c in ppe[:45]],
+                      'movement_total_as_printed':91091108,
+                      'xbrl_total_as_printed':91061771,
+                      'difference_as_printed':29337
+                  },ensure_ascii=False))
               print('ORIGINAL_XBRL_DA',json.dumps({
                   'year':year,'report':report,'count':len(tagged),
                   'total_context_candidates':[{
