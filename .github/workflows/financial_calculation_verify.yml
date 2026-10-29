@@ -31,6 +31,46 @@ jobs:
       - name: Run offline smoke tests
         working-directory: private
         run: python -m unittest discover -s validation/financials -p "test_*.py" -v
+      - name: Inspect original DART filing candidates
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+        run: |
+          python - <<'PY'
+          import os, re, json, urllib.request, urllib.parse
+          from analysis.financials.db_adapter import load_database
+          from analysis.financials.dart_original_extractor import extract_candidates
+          code = os.environ['STOCK_CODE']
+          records = [v for v in load_database().values()
+                     if str(v.get('ticker','')).zfill(6)==code and v.get('fs_div')=='CFS']
+          records.sort(key=lambda v:(int(v['year']), {'q1':1,'half':2,'q3':3,'annual':4}[v['report']]))
+          latest = records[-1]
+          periods = [(int(latest['year']),latest['report'])]
+          if latest['report']!='annual':
+              periods += [(int(latest['year'])-1,'annual'),(int(latest['year'])-1,latest['report'])]
+          for year,report in periods:
+              matches = [v for v in records if int(v['year'])==year and v['report']==report]
+              if len(matches)!=1:
+                  print('ORIGINAL_DA',year,report,'missing_or_ambiguous_filing')
+                  continue
+              v=matches[0]
+              receipts={str(x) for x in [v.get('rcept_no'),v.get('receipt_no')]
+                        +[r.get('rcept_no') for r in v.get('rows',[])[:3]]
+                        if re.fullmatch(r'[0-9]{14}',str(x or ''))}
+              if len(receipts)!=1:
+                  print('ORIGINAL_DA',year,report,'missing_or_ambiguous_receipt')
+                  continue
+              params=urllib.parse.urlencode({'crtfc_key':os.environ['DART_API_KEY'],'rcept_no':next(iter(receipts))})
+              with urllib.request.urlopen('https://opendart.fss.or.kr/api/document.xml?'+params,timeout=60) as response:
+                  body=response.read(32*1024*1024+1)
+              candidates=extract_candidates(body)
+              matched=[c for c in candidates if c.get('arithmetic_reconciled')]
+              print('ORIGINAL_DA',json.dumps({'year':year,'report':report,'candidate_count':len(matched),
+                  'sample':[{'amount':c['value_as_printed'],'unit_hint':c['unit_hint'],
+                             'scope_hint':c['scope_hint'],'file':c['source_file']}
+                            for c in matched[:5]],'approved':False},ensure_ascii=False))
+          PY
       - name: Install pandas for price DB inspection
         run: python -m pip install pandas
       - name: Verify financial database and calculations
