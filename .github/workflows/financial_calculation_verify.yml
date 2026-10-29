@@ -100,6 +100,24 @@ jobs:
               tagged = [c for c in candidates if c['kind'] in
                         ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
               if year == 2026 and report == 'half':
+                  from analysis.financials.dart_original_extractor import original_zip_texts, TableParser
+                  for filename, raw in original_zip_texts(body):
+                      parser = TableParser()
+                      parser.feed(raw)
+                      for idx, table in enumerate(parser.tables):
+                          rows = table['rows']
+                          found = any(
+                              any(v in cell['text'] for v in ('12,336,543', '12,307,206'))
+                              for row in rows for cell in row)
+                          if not found:
+                              continue
+                          print('BUILDING_TABLE_PROVENANCE',json.dumps({
+                              'file':filename,'table_index':idx,
+                              'context':table.get('context','')[-650:],
+                              'rows':[[cell['text'][:95] for cell in row]
+                                      for row in rows[:15]]
+                          },ensure_ascii=False))
+              if year == 2026 and report == 'half':
                   from analysis.financials.dart_original_extractor import original_zip_texts
                   for filename, raw in original_zip_texts(body):
                       for amount in ('12,336,543', '12,307,206', '29,337'):
