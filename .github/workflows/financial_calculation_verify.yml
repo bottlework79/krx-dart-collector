@@ -100,6 +100,37 @@ jobs:
               tagged = [c for c in candidates if c['kind'] in
                         ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
               if year == 2026 and report == 'half':
+                  # Compare every row of the PPE movement table to the
+                  # same-period consolidated XBRL asset-class facts.
+                  from analysis.financials.dart_original_extractor import TableParser
+                  for source_name, raw_text in original_zip_texts(body):
+                      parser = TableParser()
+                      parser.feed(raw_text)
+                      for table_no, table in enumerate(parser.tables):
+                          rows = table['rows']
+                          if not any(
+                              any('감가상각비' in c['text'] for c in row)
+                              for row in rows[:8]
+                          ):
+                              continue
+                          for head_no, row in enumerate(rows[:8]):
+                              for col_no, cell in enumerate(row):
+                                  if '감가상각비' not in cell['text']:
+                                      continue
+                                  detail = []
+                                  for row_no, item in enumerate(rows[head_no+1:],head_no+1):
+                                      if col_no < len(item):
+                                          detail.append({
+                                              'row':row_no,'asset':item[0]['text'][:90],
+                                              'depreciation':item[col_no]['text'][:80]
+                                          })
+                                  if any('합' in x['asset'] and '계' in x['asset'] for x in detail):
+                                      print('ORIGINAL_PPE_MOVEMENT_ROWS',json.dumps({
+                                          'year':year,'report':report,'file':source_name,
+                                          'table':table_no,'column':col_no,
+                                          'rows':detail[:30]
+                                      },ensure_ascii=False))
+              if year == 2026 and report == 'half':
                   ppe = [c for c in tagged if c['kind']=='ppe_xbrl_depreciation'
                          and c['period_context']=='CFY2026dHYA']
                   print('ORIGINAL_PPE_XBRL_RECONCILIATION',json.dumps({
