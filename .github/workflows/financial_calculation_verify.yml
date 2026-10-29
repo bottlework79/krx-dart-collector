@@ -89,6 +89,20 @@ jobs:
                       last = matched.sort_values('Date').iloc[-1]
                       print('Latest close:', str(last['Date']), str(last['Close']))
                   print('Explicit market cap column present:', any(x in prices.columns for x in ('MarketCap','Marcap','market_cap_krw')))
+                  if 'MarketCap' in matched.columns and not matched.empty:
+                      from analysis.financials.ev_ebitda_ttm import ev_ebitda_ttm
+                      cap_rows = matched.dropna(subset=['MarketCap']).sort_values('Date')
+                      if cap_rows.empty:
+                          print('EV/EBITDA: unavailable; no verified KRX market cap')
+                      else:
+                          cap_row = cap_rows.iloc[-1]
+                          cap = int(cap_row['MarketCap'])
+                          print('KRX market cap:', cap, 'as of', str(cap_row['Date']))
+                          if cap <= 0:
+                              raise SystemExit('Invalid KRX market cap')
+                          print('EV/EBITDA: pending verified DART debt, leases, NCI, cash, eligible short-term financial assets, operating income TTM and D&A TTM; no estimated ratio emitted')
+                  else:
+                      print('EV/EBITDA: unavailable; MarketCap missing from price DB')
           else:
               print('Price DB not found')
           print('PBR/PER require verified dated KRX market cap; Close alone is insufficient')
