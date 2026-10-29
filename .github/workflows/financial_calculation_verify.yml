@@ -75,6 +75,36 @@ jobs:
                      'scope':c['scope_hint'],'file':c['source_file']}
                      for c in candidates if c['kind']=='combined_da'][:8]
               },ensure_ascii=False))
+              # Bounded, redacted structural evidence for D&A candidates.
+              # Never log the original ZIP or credentials.
+              from analysis.financials.dart_original_extractor import original_zip_texts, TableParser
+              da_kinds = {'depreciation','amortization','combined_da',
+                          'cashflow_depreciation','cashflow_amortization'}
+              evidence = []
+              parsed = {}
+              for filename, raw in original_zip_texts(body):
+                  parser = TableParser()
+                  parser.feed(raw)
+                  parsed[filename] = parser.tables
+              for c in candidates:
+                  if c['kind'] not in da_kinds or len(evidence) >= 18:
+                      continue
+                  table = parsed[c['source_file']][c['table_index']]
+                  ri = c['row_index']
+                  rows = table['rows']
+                  def preview(row):
+                      return [re.sub(r'\\s+',' ',cell['text'])[:75] for cell in row[:10]]
+                  evidence.append({
+                      'kind':c['kind'],'file':c['source_file'],
+                      'table':c['table_index'],'row':ri,'column':c['column_index'],
+                      'amount':c['value_as_printed'],'unit':c['unit_hint'],
+                      'scope':c['scope_hint'],'context':re.sub(r'\\s+',' ',table['context'])[-150:],
+                      'previous':preview(rows[ri-1]) if ri else [],
+                      'current':preview(rows[ri]),
+                      'next':preview(rows[ri+1]) if ri+1<len(rows) else []})
+              print('ORIGINAL_DA_EVIDENCE',json.dumps({
+                  'year':year,'report':report,'samples':evidence
+              },ensure_ascii=False))
               print('ORIGINAL_DA',json.dumps({'year':year,'report':report,'candidate_count':len(matched),
                   'sample':[{'amount':c['value_as_printed'],'unit_hint':c['unit_hint'],
                              'scope_hint':c['scope_hint'],'file':c['source_file']}
