@@ -67,6 +67,27 @@ jobs:
               candidates=extract_candidates(body)
               matched=[c for c in candidates if c.get('arithmetic_reconciled')]
               from collections import Counter
+              print('ORIGINAL_DA_SECTIONS',json.dumps({
+                  'year':year,'report':report,
+                  'sections':dict(Counter(
+                      (c['kind'],c.get('source_section_hint','unknown'))
+                      for c in candidates if c['kind'] in
+                      ('depreciation','amortization','combined_da',
+                       'cashflow_depreciation','cashflow_amortization')
+                  ).most_common())
+              },ensure_ascii=False))
+              from analysis.financials.dart_original_extractor import original_zip_texts
+              document_sections = []
+              for source_name, raw_text in original_zip_texts(body):
+                  document_sections.append({
+                      'file':source_name,
+                      'has_consolidated_notes':bool(re.search(r'연결재무제표.{0,40}주석|연결재무제표에\\s*대한\\s*주석',raw_text)),
+                      'cashflow_note_mentions':len(re.findall(r'현금흐름표',raw_text)),
+                      'intangible_note_mentions':len(re.findall(r'무형자산',raw_text))
+                  })
+              print('ORIGINAL_DA_DOCUMENT_SECTIONS',json.dumps({
+                  'year':year,'report':report,'files':document_sections[:12]
+              },ensure_ascii=False))
               print('ORIGINAL_DA_DIAGNOSTIC',json.dumps({
                   'year':year,'report':report,
                   'candidate_kinds':dict(Counter(c['kind'] for c in candidates)),
