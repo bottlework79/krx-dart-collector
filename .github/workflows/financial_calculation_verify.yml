@@ -105,6 +105,23 @@ jobs:
                       print('EV/EBITDA: unavailable; MarketCap missing from price DB')
           else:
               print('Price DB not found')
+          from analysis.financials.account_values import parent_equity
+          from analysis.financials.ratios import pbr
+          from analysis.financials.current_per import latest_verified_snapshot, attach_current_market_caps
+          if price_path.exists() and 'Code' in prices.columns and 'MarketCap' in matched.columns:
+              cap_rows = matched.dropna(subset=['Date', 'MarketCap']).sort_values('Date')
+              if not cap_rows.empty:
+                  cap_row = cap_rows.iloc[-1]
+                  cap = int(cap_row['MarketCap'])
+                  asof = pd.Timestamp(cap_row['Date']).date()
+                  latest_balance = max(db.values(), key=lambda v: (int(v['year']), {'q1':1,'half':2,'q3':3,'annual':4}[v['report']]))
+                  equity = parent_equity(latest_balance)
+                  print('LATEST BALANCE:', latest_balance['year'], latest_balance['report'], 'parent equity:', equity)
+                  print('LATEST PBR:', str(pbr(cap, equity)) if equity is not None else 'unavailable')
+                  snapshot = latest_verified_snapshot(ttm, asof=asof)
+                  quotes = [{'ticker':code,'market_cap_krw':cap,'market_cap_date':asof.isoformat(),'source':'KRX_DATE_MARKET_CAP'}]
+                  current = attach_current_market_caps(snapshot, quotes, asof=asof)
+                  print('LATEST PER TTM:', next((r for r in current if str(r['ticker']).zfill(6)==code), 'unavailable'))
           print('PBR/PER require verified dated KRX market cap; Close alone is insufficient')
           for row in sorted(results, key=lambda x: x["ticker"])[:5]:
               print("SAMPLE:", {k: str(v) if v is not None else None for k,v in row.items()})
