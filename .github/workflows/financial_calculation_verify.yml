@@ -102,7 +102,7 @@ jobs:
               if year == 2026 and report == 'half':
                   # Compare every row of the PPE movement table to the
                   # same-period consolidated XBRL asset-class facts.
-                  from analysis.financials.dart_original_extractor import TableParser
+                  from analysis.financials.dart_original_extractor import TableParser, original_zip_texts
                   for source_name, raw_text in original_zip_texts(body):
                       parser = TableParser()
                       parser.feed(raw_text)
