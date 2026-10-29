@@ -97,6 +97,17 @@ jobs:
                       'total':c['row_cells']
                   } for c in diagnostic_rows[:12]]
               },ensure_ascii=False))
+              tagged = [c for c in candidates if c['kind'] in
+                        ('intangible_xbrl_amortization','ppe_xbrl_depreciation')]
+              print('ORIGINAL_XBRL_DA',json.dumps({
+                  'year':year,'report':report,'count':len(tagged),
+                  'total_context_candidates':[{
+                      'kind':c['kind'],'amount':c['value_as_printed'],
+                      'period':c['period_context'],'file':c['source_file'],
+                      'decimal':c['decimal_attribute'],'approved':c['approved']
+                  } for c in tagged if c['total_context_candidate']][:12],
+                  'by_kind':dict(Counter(c['kind'] for c in tagged))
+              },ensure_ascii=False))
               print('ORIGINAL_DA_SECTIONS',json.dumps({
                   'year':year,'report':report,
                   'sections':dict(Counter(
