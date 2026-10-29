@@ -79,7 +79,11 @@ jobs:
             fi
             python -m collectors.price.collect_price --code "${STOCK_CODE}" --trading-days "${TRADING_DAYS:-1}"
           else
-            python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-1250}"
+            if [[ "${{ github.event_name }}" == "schedule" ]]; then
+              python -m collectors.price.collect_price --incremental
+            else
+              python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-1250}"
+            fi
           fi
       - name: Commit changed private master DB
         if: ${{ success() && inputs.stock_code == '' }}
