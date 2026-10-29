@@ -62,8 +62,29 @@ jobs:
                   print('ORIGINAL_DA',year,report,'missing_or_ambiguous_receipt')
                   continue
               params=urllib.parse.urlencode({'crtfc_key':os.environ['DART_API_KEY'],'rcept_no':next(iter(receipts))})
-              with urllib.request.urlopen('https://opendart.fss.or.kr/api/document.xml?'+params,timeout=60) as response:
-                  body=response.read(32*1024*1024+1)
+              import time
+              from urllib.error import URLError, HTTPError
+              body = None
+              for attempt in range(1, 4):
+                  try:
+                      with urllib.request.urlopen(
+                          'https://opendart.fss.or.kr/api/document.xml?'+params,
+                          timeout=45
+                      ) as response:
+                          body=response.read(32*1024*1024+1)
+                      break
+                  except (URLError, TimeoutError, HTTPError) as exc:
+                      print('ORIGINAL_DA_DOWNLOAD_RETRY', json.dumps({
+                          'year':year,'report':report,'attempt':attempt,
+                          'error_type':type(exc).__name__
+                      }))
+                      if attempt < 3:
+                          time.sleep(attempt * 2)
+              if body is None:
+                  print('ORIGINAL_DA_DOWNLOAD_UNAVAILABLE',json.dumps({
+                      'year':year,'report':report,'status':'network_failure_not_zero'
+                  }))
+                  continue
               candidates=extract_candidates(body)
               matched=[c for c in candidates if c.get('arithmetic_reconciled')]
               from collections import Counter
