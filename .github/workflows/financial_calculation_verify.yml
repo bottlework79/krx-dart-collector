@@ -70,7 +70,7 @@ jobs:
               print('ORIGINAL_DA_SECTIONS',json.dumps({
                   'year':year,'report':report,
                   'sections':dict(Counter(
-                      (c['kind'],c.get('source_section_hint','unknown'))
+                      c['kind'] + ':' + c.get('source_section_hint','unknown')
                       for c in candidates if c['kind'] in
                       ('depreciation','amortization','combined_da',
                        'cashflow_depreciation','cashflow_amortization')
