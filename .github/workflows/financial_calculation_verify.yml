@@ -294,7 +294,7 @@ jobs:
               print('ORIGINAL_DA',json.dumps({'year':year,'report':report,'candidate_count':len(matched),
                   'sample':[{'amount':c['value_as_printed'],'unit_hint':c['unit_hint'],
                              'scope_hint':c['scope_hint'],'file':c['source_file']}
-                            for c in matched[:5]],'approved':False},ensure_ascii=False))
+                            for c in matched[:5] if 'value_as_printed' in c],'approved':False},ensure_ascii=False))
           PY
       - name: Install pandas for price DB inspection
         run: python -m pip install pandas
