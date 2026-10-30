@@ -286,7 +286,10 @@ jobs:
                               'local_has_unit_word':'단위' in target.get('local_unit_context',''),
                               'local_has_thousand':'천원' in target.get('local_unit_context',''),
                               'section_unit':target.get('section_unit'),
-                              'table_unit':table_unit_evidence(target)
+                              'table_unit':table_unit_evidence(target),
+                              'previous_table_unit_hint':target.get('previous_table_unit_hint'),
+                              'previous_table_is_unit_caption':target.get('previous_table_is_unit_caption'),
+                              'previous_table_row_count':target.get('previous_table_row_count')
                           },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
