@@ -322,15 +322,18 @@ jobs:
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
                   'samples':local_units[:12]},ensure_ascii=False))
-              # No verified context/unit ledger exists yet: the selector must
-              # refuse raw candidates rather than silently manufacture amounts.
+              # API is authoritative when present. Original extraction is a
+              # fallback only; never compare its value against DART API.
               selection = choose_original_da_from_archive(
                   body, source_receipt=next(iter(receipts)),
                   period=f'{year}-{report}')
-              print('ORIGINAL_DA_SELECTION',json.dumps({
+              print('ORIGINAL_DA_FALLBACK',json.dumps({
                   'year':year,'report':report,
-                  'statuses':{k:v['status'] for k,v in selection.items()},
-                  'approved':False},ensure_ascii=False))
+                  'requested_kinds':original_missing[(year,report)],
+                  'statuses':{k:selection[k]['status']
+                              for k in original_missing[(year,report)]},
+                  'api_original_amount_comparison':False
+              },ensure_ascii=False))
               print('ORIGINAL_DA_DIAGNOSTIC',json.dumps({
                   'year':year,'report':report,
                   'candidate_kinds':dict(Counter(c['kind'] for c in candidates)),
