@@ -291,6 +291,16 @@ jobs:
                               'previous_table_is_unit_caption':target.get('previous_table_is_unit_caption'),
                               'previous_table_row_count':target.get('previous_table_row_count')
                           },ensure_ascii=False))
+              from analysis.financials.dart_original_extractor import audit_da_candidate_scope
+              scope_audit = audit_da_candidate_scope(candidates)
+              print('ORIGINAL_DA_SCOPE_AUDIT',json.dumps({
+                  'year':year,'report':report,
+                  'count':len(scope_audit),
+                  'kinds':dict(Counter(x['kind'] for x in scope_audit)),
+                  'missing_checks':dict(Counter(
+                      check for x in scope_audit for check in x['missing_checks'])),
+                  'samples':[x for x in scope_audit if x['unit_hint']][:14]
+              },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
