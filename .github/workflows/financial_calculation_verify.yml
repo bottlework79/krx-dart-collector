@@ -219,6 +219,21 @@ jobs:
               print('ORIGINAL_DA_DOCUMENT_SECTIONS',json.dumps({
                   'year':year,'report':report,'files':document_sections[:12]
               },ensure_ascii=False))
+              from analysis.financials.dart_original_extractor import (
+                  infer_local_unit_evidence, choose_original_da_from_archive)
+              local_units = infer_local_unit_evidence(candidates)
+              print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
+                  'year':year,'report':report,'count':len(local_units),
+                  'samples':local_units[:12]},ensure_ascii=False))
+              # No verified context/unit ledger exists yet: the selector must
+              # refuse raw candidates rather than silently manufacture amounts.
+              selection = choose_original_da_from_archive(
+                  body, source_receipt=receipt,
+                  period=f'{year}-{report}')
+              print('ORIGINAL_DA_SELECTION',json.dumps({
+                  'year':year,'report':report,
+                  'statuses':{k:v['status'] for k,v in selection.items()},
+                  'approved':False},ensure_ascii=False))
               print('ORIGINAL_DA_DIAGNOSTIC',json.dumps({
                   'year':year,'report':report,
                   'candidate_kinds':dict(Counter(c['kind'] for c in candidates)),
