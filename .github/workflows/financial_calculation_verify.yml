@@ -271,6 +271,23 @@ jobs:
                   'samples':([x for x in da_tables if x['unit']][:12]
                              +[x for x in da_tables if not x['unit']][:4])
               },ensure_ascii=False))
+              # Diagnose parser state without exposing raw filing text.
+              for source_name, raw_text in original_zip_texts(body):
+                  if year == 2026 and report == 'half' and source_name == '20260814003532.xml':
+                      parser = TableParser()
+                      parser.feed(raw_text)
+                      target = parser.tables[42] if len(parser.tables) > 42 else None
+                      if target:
+                          print('ORIGINAL_UNIT_PARSER_STATE',json.dumps({
+                              'table_index':42,
+                              'preceding_marker_count':len(target.get('preceding_unit_markers',[])),
+                              'local_context_chars':len(target.get('local_unit_context','')),
+                              'unit_context_chars':len(target.get('unit_context','')),
+                              'local_has_unit_word':'단위' in target.get('local_unit_context',''),
+                              'local_has_thousand':'천원' in target.get('local_unit_context',''),
+                              'section_unit':target.get('section_unit'),
+                              'table_unit':table_unit_evidence(target)
+                          },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
