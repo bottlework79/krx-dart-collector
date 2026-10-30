@@ -226,6 +226,19 @@ jobs:
                   'year':year,'report':report,
                   'files':inspect_original_unit_anchors(body)
               },ensure_ascii=False))
+              from analysis.financials.dart_original_extractor import TableParser, table_unit_diagnostics
+              for source_name, raw_text in original_zip_texts(body):
+                  parser = TableParser()
+                  parser.feed(raw_text)
+                  matched = []
+                  for table in parser.tables:
+                      if any(('감가상각비' in cell['text'] or '상각비' in cell['text'])
+                             for row in table['rows'] for cell in row):
+                          matched.append(table_unit_diagnostics(table))
+                  print('ORIGINAL_DA_TABLE_CONTEXT',json.dumps({
+                      'year':year,'report':report,'file':source_name,
+                      'matching_tables':len(matched),'samples':matched[:12]
+                  },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
