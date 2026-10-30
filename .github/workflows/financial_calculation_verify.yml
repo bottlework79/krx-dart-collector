@@ -472,6 +472,10 @@ jobs:
                         r.get('account_nm'),r.get('thstrm_amount'))
               print('EV AUDIT matched account count:',len(hits))
           from analysis.financials.ev_ebitda_ttm import audited_ev_inputs_from_database
+          from analysis.financials.ev_ebitda_ttm import dart_api_da_diagnostics, dart_api_da_filings
+          print('DART_API_DA_ACCOUNTS:', dart_api_da_diagnostics(db, code)[:60])
+          for da_kind in ('depreciation', 'amortization'):
+              print('DART_API_DA_MATCHED:', da_kind, dart_api_da_filings(db, code, da_kind))
           ev_audit = audited_ev_inputs_from_database(db, code, locals().get('cap'))
           print('EV INPUTS CONNECTED:', {k: ({a: str(b) if b is not None else None for a,b in v.items()} if k == 'inputs' else v) for k,v in ev_audit.items()})
           print('EV AUDIT calculation withheld until all debt, leases, NCI, cash and D&A are verified without double counting')
