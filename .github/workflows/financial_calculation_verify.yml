@@ -228,7 +228,7 @@ jobs:
               # No verified context/unit ledger exists yet: the selector must
               # refuse raw candidates rather than silently manufacture amounts.
               selection = choose_original_da_from_archive(
-                  body, source_receipt=receipt,
+                  body, source_receipt=next(iter(receipts)),
                   period=f'{year}-{report}')
               print('ORIGINAL_DA_SELECTION',json.dumps({
                   'year':year,'report':report,
