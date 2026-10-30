@@ -239,6 +239,38 @@ jobs:
                       'year':year,'report':report,'file':source_name,
                       'matching_tables':len(matched),'samples':matched[:12]
                   },ensure_ascii=False))
+              from analysis.financials.dart_original_extractor import (
+                  extract_table_records, table_unit_evidence)
+              table_records = extract_table_records(body)
+              da_tables = []
+              for record in table_records:
+                  if not any(('감가상각비' in cell['text'] or '상각비' in cell['text'])
+                             for row in record['rows'] for cell in row):
+                      continue
+                  linked = [x for x in candidates
+                            if x.get('source_file') == record['source_file']
+                            and x.get('table_index') == record['table_index']]
+                  da_tables.append({
+                      'file':record['source_file'],
+                      'table_index':record['table_index'],
+                      'unit':record['unit_hint'],
+                      'unit_strategy':record['unit_strategy'],
+                      'unit_multiplier':record['unit_multiplier_candidate'],
+                      'candidate_count':len(linked),
+                      'candidate_kinds':dict(Counter(x['kind'] for x in linked)),
+                      'candidate_units':list(dict.fromkeys(x.get('unit_hint') for x in linked)),
+                      'sample_amounts':[{'kind':x['kind'],'amount':x.get('value_as_printed'),
+                                         'unit':x.get('unit_hint')}
+                                        for x in linked if x.get('value_as_printed') is not None][:4]
+                  })
+              print('ORIGINAL_DA_UNIT_LINK_TRACE',json.dumps({
+                  'year':year,'report':report,'matched_tables':len(da_tables),
+                  'tables_with_unit':sum(bool(x['unit']) for x in da_tables),
+                  'tables_with_unit_and_candidates':sum(
+                      bool(x['unit']) and x['candidate_count']>0 for x in da_tables),
+                  'samples':([x for x in da_tables if x['unit']][:12]
+                             +[x for x in da_tables if not x['unit']][:4])
+              },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
