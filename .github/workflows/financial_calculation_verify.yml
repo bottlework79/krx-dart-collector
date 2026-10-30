@@ -49,7 +49,24 @@ jobs:
           periods = [(int(latest['year']),latest['report'])]
           if latest['report']!='annual':
               periods += [(int(latest['year'])-1,'annual'),(int(latest['year'])-1,latest['report'])]
+          from analysis.financials.ev_ebitda_ttm import dart_api_da_filings
+          api_da = {kind: {(x['year'], x['report']) for x in dart_api_da_filings(
+              {k:v for k,v in load_database().items()
+               if str(v.get('ticker','')).zfill(6)==code}, code, kind)}
+              for kind in ('depreciation', 'amortization')}
+          original_missing = {}
+          for y, rep in periods:
+              missing = [kind for kind in ('depreciation', 'amortization')
+                         if (y, rep) not in api_da[kind]]
+              original_missing[(y, rep)] = missing
+              print('DART_FIRST_SOURCE_PLAN', json.dumps({
+                  'year':y, 'report':rep, 'api_present':[
+                      kind for kind in api_da if kind not in missing],
+                  'original_fallback_needed':missing}, ensure_ascii=False))
           for year,report in periods:
+              if not original_missing[(year, report)]:
+                  print('ORIGINAL_DA_SKIPPED_API_COMPLETE',year,report)
+                  continue
               matches = [v for v in records if int(v['year'])==year and v['report']==report]
               if len(matches)!=1:
                   print('ORIGINAL_DA',year,report,'missing_or_ambiguous_filing')
