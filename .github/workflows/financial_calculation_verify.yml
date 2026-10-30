@@ -221,6 +221,11 @@ jobs:
               },ensure_ascii=False))
               from analysis.financials.dart_original_extractor import (
                   infer_local_unit_evidence, choose_original_da_from_archive)
+              from analysis.financials.dart_original_extractor import inspect_original_unit_anchors
+              print('ORIGINAL_XML_UNIT_ANCHORS',json.dumps({
+                  'year':year,'report':report,
+                  'files':inspect_original_unit_anchors(body)
+              },ensure_ascii=False))
               local_units = infer_local_unit_evidence(candidates)
               print('ORIGINAL_UNIT_EVIDENCE',json.dumps({
                   'year':year,'report':report,'count':len(local_units),
