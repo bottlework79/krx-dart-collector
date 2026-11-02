@@ -64,19 +64,6 @@ jobs:
             args=(--start-year "$START_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
           fi
           python -m collectors.dart.collect_dart "${args[@]}"
-      - name: Collect original evidence for all selected reporting periods
-        working-directory: private
-        env:
-          DART_API_KEY: ${{ secrets.DART_API_KEY }}
-          STOCK_CODE: ${{ inputs.stock_code }}
-          BATCH_INDEX: ${{ inputs.batch_index }}
-          BATCH_SIZE: ${{ inputs.batch_size }}
-          START_YEAR: ${{ inputs.start_year }}
-        run: |
-          set -euo pipefail
-          args=(--start-year "$START_YEAR" --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE")
-          if [[ -n "$STOCK_CODE" ]]; then args=(--start-year "$START_YEAR" --code "$STOCK_CODE"); fi
-          python -m collectors.dart.collect_original_evidence "${args[@]}"
       - name: Commit private DART database
         working-directory: private
         run: |
