@@ -19,10 +19,15 @@ on:
         type: number
         default: 2
       start_year:
-        description: '수집 시작 연도'
+        description: '수집 시작 연도 (2015년은 TTM 계산용 보조자료)'
         required: false
         type: number
-        default: 2021
+        default: 2015
+      end_year:
+        description: '수집 종료 연도 (기본 2026년, 미공시 분기는 자동 제외)'
+        required: false
+        type: number
+        default: 2026
 
 permissions:
   contents: read
@@ -57,11 +62,12 @@ jobs:
           BATCH_INDEX: ${{ inputs.batch_index }}
           BATCH_SIZE: ${{ inputs.batch_size }}
           START_YEAR: ${{ inputs.start_year }}
+          END_YEAR: ${{ inputs.end_year }}
         run: |
           set -euo pipefail
-          args=(--start-year "$START_YEAR" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
+          args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
           if [[ -n "$STOCK_CODE" ]]; then
-            args=(--start-year "$START_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
+            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
           fi
           python -m collectors.dart.collect_dart "${args[@]}"
       - name: Commit private DART database
