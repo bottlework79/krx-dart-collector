@@ -10,10 +10,10 @@ on:
         type: string
         default: ''
       trading_days:
-        description: '전체 신규 수집 시 거래일 수 (1~1250, 기본 1250)'
+        description: '전체 신규 수집 시 거래일 수 (1~3200, 기본 3200)'
         required: false
         type: number
-        default: 1250
+        default: 3200
       days:
         description: '단일 종목 조회 기간 (달력일)'
         required: false
@@ -82,7 +82,7 @@ jobs:
             if [[ "${{ github.event_name }}" == "schedule" ]]; then
               python -m collectors.price.collect_price --incremental
             else
-              python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-1250}"
+              python -m collectors.price.collect_price --trading-days "${TRADING_DAYS:-3200}"
             fi
           fi
       - name: Commit changed private master DB
@@ -97,7 +97,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "PRIVATE_MARKET_DB_CHANGED=False"
           else
-            git commit -m "Update 1250-day prices and KRX market caps" > /dev/null
+            git commit -m "Backfill historical KRX prices and market caps" > /dev/null
             # A long-running job may start before other private commits land.
             # Preserve those commits without force-pushing or exposing private logs.
             git fetch origin main > /tmp/krx_private_fetch.log 2>&1
