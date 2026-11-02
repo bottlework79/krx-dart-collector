@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --end-report "$END_REPORT" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
           if [[ -n "$STOCK_CODE" ]]; then
-            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
+            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --end-report "$END_REPORT" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
           fi
           python -m collectors.dart.collect_dart "${args[@]}"
       - name: Commit private DART database
