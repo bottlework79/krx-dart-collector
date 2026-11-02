@@ -1,0 +1,72 @@
+name: Enrich Missing DART Original Evidence
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '6-digit ticker; blank means batch'
+        required: false
+        type: string
+        default: ''
+      batch_index:
+        description: 'Batch index starting at 0'
+        required: false
+        type: number
+        default: 0
+      batch_size:
+        description: 'Tickers per batch (1-25)'
+        required: false
+        type: number
+        default: 2
+      start_year:
+        description: 'Earliest reporting year'
+        required: false
+        type: number
+        default: 2021
+permissions:
+  contents: read
+concurrency:
+  group: dart-private-collection
+  cancel-in-progress: false
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install pandas
+      - name: Collect only planned missing original evidence
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+          BATCH_INDEX: ${{ inputs.batch_index }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+          START_YEAR: ${{ inputs.start_year }}
+        run: |
+          set -euo pipefail
+          args=(--start-year "$START_YEAR" --batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE")
+          if [[ -n "$STOCK_CODE" ]]; then args=(--start-year "$START_YEAR" --code "$STOCK_CODE"); fi
+          python -m collectors.dart.collect_original_evidence "${args[@]}"
+      - name: Save extracted evidence
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -d data/original_evidence ]]; then git add -- data/original_evidence/; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Cache selected DART original evidence"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
