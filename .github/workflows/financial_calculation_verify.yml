@@ -104,6 +104,39 @@ jobs:
                   }))
                   continue
               candidates=extract_candidates(body)
+              # Determine whether the current filing XML actually contains
+              # consolidated financial notes or only other report sections.
+              if (year, report) == (int(latest['year']), latest['report']):
+                  from analysis.financials.dart_original_extractor import original_zip_texts, TableParser
+                  lease_xml_audit = []
+                  for filename, raw in original_zip_texts(body):
+                      parser = TableParser()
+                      parser.feed(raw)
+                      lease_tables = []
+                      for ti, table in enumerate(parser.tables):
+                          cells = [cell['text'] for row in table['rows'] for cell in row]
+                          if any('리스부채' in x.replace(' ', '') or
+                                 '기타금융부채' in x.replace(' ', '') for x in cells):
+                              lease_tables.append({
+                                  'table': ti,
+                                  'headers': [[c['text'][:75] for c in row[:9]]
+                                              for row in table['rows'][:4]],
+                                  'lease_rows': [[c['text'][:95] for c in row[:9]]
+                                                 for row in table['rows']
+                                                 if any('리스부채' in c['text'].replace(' ', '')
+                                                        for c in row)][:4],
+                                  'context': table.get('context', '')[-180:]
+                              })
+                      lease_xml_audit.append({
+                          'file': filename, 'bytes': len(raw),
+                          'table_count': len(parser.tables),
+                          'lease_term_occurrences': raw.count('리스부채') + raw.count('리스 부채'),
+                          'financial_note_occurrences': raw.count('기타금융부채'),
+                          'lease_tables': lease_tables[:12]
+                      })
+                  print('LATEST_ORIGINAL_LEASE_XML_AUDIT',
+                        json.dumps(lease_xml_audit, ensure_ascii=False))
+
               matched=[c for c in candidates if c.get('arithmetic_reconciled')]
               from collections import Counter
               diagnostic_rows = [c for c in candidates if c['kind'] == 'asset_movement_total_diagnostic']
