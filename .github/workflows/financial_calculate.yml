@@ -60,6 +60,12 @@ jobs:
           args=()
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
           python -m analysis.financials.missing_data "${args[@]}"
+      - name: Diagnose original D&A and borrowing coverage
+        if: ${{ inputs.stock_code != '' }}
+        working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+        run: python -m analysis.financials.evidence_diagnostics --code "$STOCK_CODE"
       - name: Commit private calculation results
         working-directory: private
         run: |
@@ -67,6 +73,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/financial_indicators.json data/missing_financial_data.json
+          if [[ -f data/financial_evidence_diagnostics.json ]]; then git add -- data/financial_evidence_diagnostics.json; fi
           if git diff --cached --quiet; then
             echo "계산 결과 변경 없음"
           else
