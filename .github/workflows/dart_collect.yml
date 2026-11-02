@@ -23,6 +23,16 @@ on:
         required: false
         type: number
         default: 2015
+      end_report:
+        description: '종료 연도 마지막 보고서 (q1, half, q3, annual)'
+        required: false
+        type: choice
+        options:
+          - half
+          - annual
+          - q1
+          - q3
+        default: half
       end_year:
         description: '수집 종료 연도 (기본 2026년, 미공시 분기는 자동 제외)'
         required: false
@@ -63,9 +73,10 @@ jobs:
           BATCH_SIZE: ${{ inputs.batch_size }}
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
+          END_REPORT: ${{ inputs.end_report }}
         run: |
           set -euo pipefail
-          args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
+          args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --end-report "$END_REPORT" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
           if [[ -n "$STOCK_CODE" ]]; then
             args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
           fi
