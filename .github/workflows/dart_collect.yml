@@ -64,13 +64,20 @@ jobs:
             args=(--start-year "$START_YEAR" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
           fi
           python -m collectors.dart.collect_dart "${args[@]}"
+      - name: Collect original lease evidence for selected ticker
+        if: ${{ inputs.stock_code != '' }}
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+        run: python -m collectors.dart.collect_original_evidence --code "$STOCK_CODE"
       - name: Commit private DART database
         working-directory: private
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- data/financial_statements.pkl.gz data/unavailable_periods.json
+          git add -- data/financial_statements.pkl.gz data/unavailable_periods.json data/original_evidence/
           if git diff --cached --quiet; then
             echo "재무 DB 변경 없음"
           else
