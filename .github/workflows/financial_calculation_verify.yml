@@ -510,6 +510,19 @@ jobs:
           periods = sorted(db.values(), key=lambda v:(int(v['year']),{'q1':1,'half':2,'q3':3,'annual':4}[v['report']]))
           current = periods[-1]
           print('EV AUDIT latest period:', current['year'], current['report'], current['fs_div'])
+          # Inspect the stored compressed DB first, including nonstandard
+          # account IDs and alternate labels. This is read-only diagnostics.
+          bs_rows = [row for row in current['rows']
+                     if row.get('sj_div') == 'BS'
+                     and str(row.get('account_detail') or '-').strip() in ('', '-')]
+          print('EV DB BS ACCOUNT COUNT:', len(bs_rows))
+          for row in bs_rows:
+              print('EV DB BS ROW:', {
+                  'account_id': row.get('account_id'),
+                  'account_nm': row.get('account_nm'),
+                  'amount': row.get('thstrm_amount')
+              })
+
           for metric in ('operating_profit','cash','finance_costs','operating_cashflow','capex_ppe'):
               print('EV AUDIT', metric, unique_amount(current,metric))
           terms = ('차입금','사채','리스부채','비지배지분','단기금융','감가상각','무형자산상각','상각비','현금및현금성자산')
