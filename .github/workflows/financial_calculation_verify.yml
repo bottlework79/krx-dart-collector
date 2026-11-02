@@ -64,6 +64,7 @@ jobs:
                       kind for kind in api_da if kind not in missing],
                   'original_fallback_needed':missing}, ensure_ascii=False))
           selected_original_da = []
+          selected_original_lease = []
           for year,report in periods:
               if not original_missing[(year, report)]:
                   print('ORIGINAL_DA_SKIPPED_API_COMPLETE',year,report)
@@ -104,6 +105,9 @@ jobs:
                   }))
                   continue
               candidates=extract_candidates(body)
+              if (year, report) == (int(latest['year']), latest['report']):
+                  selected_original_lease.extend(c for c in candidates
+                      if c.get('source_strategy') == 'xbrl_tagged_lease')
               # Determine whether the current filing XML actually contains
               # consolidated financial notes or only other report sections.
               if (year, report) == (int(latest['year']), latest['report']):
@@ -469,6 +473,8 @@ jobs:
                              'scope_hint':c['scope_hint'],'file':c['source_file']}
                             for c in matched[:5] if 'value_as_printed' in c],'approved':False},ensure_ascii=False))
           from pathlib import Path
+          Path('original_lease_rows.json').write_text(
+              json.dumps(selected_original_lease,ensure_ascii=False),encoding='utf-8')
           Path('original_da_ttm_rows.json').write_text(
               json.dumps(selected_original_da,ensure_ascii=False),encoding='utf-8')
           print('ORIGINAL_DA_TTM_ROWS',len(selected_original_da))
@@ -609,8 +615,12 @@ jobs:
           original_path = Path('original_da_ttm_rows.json')
           original_da_rows = (json.loads(original_path.read_text(encoding='utf-8'))
                               if original_path.exists() else [])
+          lease_path = Path('original_lease_rows.json')
+          original_lease_rows = (json.loads(lease_path.read_text(encoding='utf-8'))
+                                 if lease_path.exists() else [])
           ev_audit = audited_ev_inputs_from_database(
-              db, code, locals().get('cap'), original_da_rows=original_da_rows)
+              db, code, locals().get('cap'), original_da_rows=original_da_rows,
+              original_lease_rows=original_lease_rows)
           print('EV INPUTS CONNECTED:', {k: ({a: str(b) if b is not None else None for a,b in v.items()} if k == 'inputs' else v) for k,v in ev_audit.items()})
           print('EV AUDIT calculation withheld until all debt, leases, NCI, cash and D&A are verified without double counting')
           for row in sorted(results, key=lambda x: x["ticker"])[:5]:
