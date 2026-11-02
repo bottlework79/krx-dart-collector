@@ -349,6 +349,21 @@ jobs:
                       'amount_krw':picked['amount_krw'],
                       'unit_verified':True,'approved':True,
                       'source_receipt':next(iter(receipts))})
+              lease_candidates = [item for item in candidates
+                                  if item.get('kind') == 'lease_liabilities']
+              print('ORIGINAL_LEASE_NOTE_EVIDENCE', json.dumps({
+                  'year': year, 'report': report,
+                  'count': len(lease_candidates),
+                  'samples': [{
+                      'file': item.get('source_file'),
+                      'table': item.get('table_index'),
+                      'row': item.get('row_index'),
+                      'column': item.get('column_index'),
+                      'amount': item.get('value_as_printed'),
+                      'unit': item.get('unit_hint'),
+                      'scope': item.get('scope_hint')
+                  } for item in lease_candidates[:12]]
+              }, ensure_ascii=False))
               print('ORIGINAL_DA_DIAGNOSTIC',json.dumps({
                   'year':year,'report':report,
                   'candidate_kinds':dict(Counter(c['kind'] for c in candidates)),
