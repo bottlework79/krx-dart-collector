@@ -108,6 +108,25 @@ jobs:
               # consolidated financial notes or only other report sections.
               if (year, report) == (int(latest['year']), latest['report']):
                   from analysis.financials.dart_original_extractor import original_zip_texts, TableParser
+                  # Locate exact reported lease amounts in raw XML, including nested markup.
+                  for filename, raw in original_zip_texts(body):
+                      import html
+                      xml_text = html.unescape(raw)
+                      targets = ['15,034,551', '63,896,901', '78,931,452',
+                                 '15034551', '63896901', '78931452',
+                                 '15,034,551,375', '63,896,901,000']
+                      hits = []
+                      for target in targets:
+                          for m in list(re.finditer(re.escape(target), xml_text))[:8]:
+                              hits.append({'value':target,'offset':m.start(),
+                                           'raw_xml_context':xml_text[max(0,m.start()-250):m.end()+250]})
+                      note_heads = []
+                      for m in list(re.finditer(r'12\\.\\s*기타금융부채|유동\\s*리스부채|비유동\\s*리스부채', xml_text))[:15]:
+                          note_heads.append({'offset':m.start(),
+                                             'raw_xml_context':xml_text[max(0,m.start()-180):m.end()+400]})
+                      print('LATEST_LEASE_RAW_XML_VALUES', json.dumps({
+                          'file':filename,'matches':hits[:25],
+                          'note_contexts':note_heads[:15]},ensure_ascii=False))
                   lease_xml_audit = []
                   for filename, raw in original_zip_texts(body):
                       parser = TableParser()
