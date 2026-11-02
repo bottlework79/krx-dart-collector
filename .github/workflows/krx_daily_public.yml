@@ -56,7 +56,7 @@ jobs:
       - name: Verify private entrypoints exist
         run: |
           test -f private/collectors/price/collect_price.py
-          python -m py_compile private/collectors/price/collect_price.py
+          python -m py_compile private/collectors/price/collect_price.py private/collectors/price/storage.py
       - name: Collect stock prices
         id: price_update
         working-directory: private
@@ -93,7 +93,15 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- data/market_1250.pkl.gz
+          git add -- data/market_*.pkl.gz
+          python - <<'PY'
+          from pathlib import Path
+          files = sorted(Path('data').glob('market_*.pkl.gz'))
+          oversized = [str(p) for p in files if p.stat().st_size > 100 * 1024 * 1024]
+          if oversized:
+              raise SystemExit('KRX partition exceeds GitHub 100 MiB limit: ' + ', '.join(oversized))
+          print('KRX DB files staged:', len(files))
+          PY
           if git diff --cached --quiet; then
             echo "PRIVATE_MARKET_DB_CHANGED=False"
           else
