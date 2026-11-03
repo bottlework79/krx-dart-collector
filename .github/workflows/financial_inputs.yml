@@ -1,0 +1,58 @@
+name: Process DART Financial Inputs (Stage 2)
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '6-digit ticker'
+        required: true
+        type: string
+        default: '007860'
+      year:
+        description: 'Reporting year'
+        required: true
+        type: string
+        default: '2026'
+permissions:
+  contents: read
+concurrency:
+  group: dart-private-collection
+  cancel-in-progress: false
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install pandas requests
+      - name: Extract original financial inputs
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+          YEAR: ${{ inputs.year }}
+        run: |
+          set -euo pipefail
+          python -m collectors.financial.collect_inputs --code "$STOCK_CODE" --year "$YEAR" --enrich-original
+      - name: Commit processed inputs
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/financial_inputs/
+          if ! git diff --cached --quiet; then
+            git commit -m "Update annual DART financial inputs"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
