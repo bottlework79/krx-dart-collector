@@ -8,7 +8,7 @@ on:
         type: string
         default: '007860'
       year:
-        description: 'Reporting year'
+        description: 'Reporting year or inclusive range (e.g. 2015-2026)'
         required: true
         type: string
         default: '2026'
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Checkout private repository
         uses: actions/checkout@v4
@@ -42,7 +42,24 @@ jobs:
           YEAR: ${{ inputs.year }}
         run: |
           set -euo pipefail
-          python -m collectors.financial.collect_inputs --code "$STOCK_CODE" --year "$YEAR" --enrich-original
+          if [[ "$YEAR" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
+            start="${BASH_REMATCH[1]}"
+            end="${BASH_REMATCH[2]}"
+            if (( 10#$start < 2015 || 10#$end > 2026 || 10#$start > 10#$end )); then
+              echo "Invalid year range: $YEAR" >&2
+              exit 1
+            fi
+            for (( y=10#$start; y<=10#$end; y++ )); do
+              echo "::group::Financial inputs $y"
+              python -m collectors.financial.collect_inputs --code "$STOCK_CODE" --year "$y" --enrich-original
+              echo "::endgroup::"
+            done
+          elif [[ "$YEAR" =~ ^[0-9]{4}$ ]]; then
+            python -m collectors.financial.collect_inputs --code "$STOCK_CODE" --year "$YEAR" --enrich-original
+          else
+            echo "Expected YYYY or YYYY-YYYY, got: $YEAR" >&2
+            exit 1
+          fi
       - name: Commit processed inputs
         working-directory: private
         run: |
