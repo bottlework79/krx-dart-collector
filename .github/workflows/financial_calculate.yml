@@ -40,18 +40,17 @@ jobs:
           python-version: '3.11'
       - name: Install calculation dependencies
         run: python -m pip install pandas
-      - name: Calculate financial indicators with on-demand evidence
+      - name: Calculate financial indicators from verified Stage 2 inputs
         working-directory: private
         env:
           STOCK_CODE: ${{ inputs.stock_code }}
           YEAR: ${{ inputs.year }}
-          DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: |
           set -euo pipefail
           args=()
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
           if [[ -n "$YEAR" ]]; then args+=(--year "$YEAR"); fi
-          python -m analysis.financials.calculate --online-fallback "${args[@]}"
+          python -m analysis.financials.calculate --processed-inputs data/financial_inputs "${args[@]}"
       - name: Plan remaining missing evidence
         working-directory: private
         env:
