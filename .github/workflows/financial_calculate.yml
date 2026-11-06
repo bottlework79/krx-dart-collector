@@ -51,6 +51,15 @@ jobs:
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
           if [[ -n "$YEAR" ]]; then args+=(--year "$YEAR"); fi
           python -m analysis.financials.calculate --processed-inputs data/financial_inputs "${args[@]}"
+      - name: Compare flagged anomalies with public FnGuide data
+        if: ${{ inputs.stock_code != '' && inputs.year != '' }}
+        working-directory: private
+        continue-on-error: true
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          YEAR: ${{ inputs.year }}
+        run: |
+          python -m analysis.financials.fnguide_compare --code "$STOCK_CODE" --year "$YEAR"
       - name: Plan remaining missing evidence
         working-directory: private
         env:
