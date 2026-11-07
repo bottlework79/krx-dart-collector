@@ -60,6 +60,15 @@ jobs:
           YEAR: ${{ inputs.year }}
         run: |
           python -m analysis.financials.fnguide_compare --code "$STOCK_CODE" --year "$YEAR"
+      - name: Compare flagged anomalies with Naver Finance reference
+        if: ${{ inputs.stock_code != '' && inputs.year != '' }}
+        working-directory: private
+        continue-on-error: true
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          YEAR: ${{ inputs.year }}
+        run: |
+          python -m analysis.financials.naver_compare --code "$STOCK_CODE" --year "$YEAR"
       - name: Plan remaining missing evidence
         working-directory: private
         env:
