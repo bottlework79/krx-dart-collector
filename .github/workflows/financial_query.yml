@@ -1,0 +1,42 @@
+name: Query Saved Financial Indicators
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '종목코드 6자리'
+        required: true
+        default: '007860'
+        type: string
+      year:
+        description: '연도 (비우면 전체 연도)'
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Print saved indicators (read only)
+        working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          YEAR: ${{ inputs.year }}
+        run: |
+          set -euo pipefail
+          args=(--code "$STOCK_CODE")
+          if [[ -n "$YEAR" ]]; then args+=(--year "$YEAR"); fi
+          python -m analysis.financials.query_indicators "${args[@]}"
