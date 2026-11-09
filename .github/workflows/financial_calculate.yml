@@ -82,6 +82,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/financial_indicators/ data/missing_financial_data.json
+          if [[ -d data/naver_financials ]]; then git add -- data/naver_financials/; fi
           if [[ -d data/original_evidence ]]; then git add -- data/original_evidence; fi
           if [[ -f data/financial_evidence_diagnostics.json ]]; then git add -- data/financial_evidence_diagnostics.json; fi
           if git diff --cached --quiet; then
