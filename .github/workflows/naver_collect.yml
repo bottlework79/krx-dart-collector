@@ -1,0 +1,58 @@
+name: Collect Naver WiseReport Financials
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '종목코드 6자리'
+        required: true
+        default: '007860'
+        type: string
+      year:
+        description: '조회 기준연도'
+        required: true
+        default: '2025'
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: private-naver-collection
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Collect WiseReport data
+        working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          YEAR: ${{ inputs.year }}
+        run: |
+          set -euo pipefail
+          python -m collectors.naver.collect_naver --code "$STOCK_CODE" --year "$YEAR"
+      - name: Commit private WiseReport DB
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/naver_financials/
+          if git diff --cached --quiet; then
+            echo "네이버 DB 변경 없음"
+          else
+            git commit -m "Update WiseReport financial DB"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
