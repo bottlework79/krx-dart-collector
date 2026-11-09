@@ -7,11 +7,6 @@ on:
         required: true
         default: '007860'
         type: string
-      year:
-        description: '조회 기준연도'
-        required: true
-        default: '2025'
-        type: string
 permissions:
   contents: read
 concurrency:
@@ -37,10 +32,9 @@ jobs:
         working-directory: private
         env:
           STOCK_CODE: ${{ inputs.stock_code }}
-          YEAR: ${{ inputs.year }}
         run: |
           set -euo pipefail
-          python -m collectors.naver.collect_naver --code "$STOCK_CODE" --year "$YEAR"
+          python -m collectors.naver.collect_naver --code "$STOCK_CODE"
       - name: Commit private WiseReport DB
         working-directory: private
         run: |
