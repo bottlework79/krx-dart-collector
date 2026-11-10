@@ -108,9 +108,9 @@ jobs:
               failed=1
             fi
             # Checkpoint EACH year, even if another period failed.
-            git add -- data/financial_inputs/
+            git add -- data/financial_inputs/ || exit 1
             if ! git diff --cached --quiet; then
-              git commit -m "Update Stage 2 financial inputs ($y)"
+              git commit -m "Update Stage 2 financial inputs ($y)" || exit 1
               git fetch origin main || exit 1
               git rebase origin/main || exit 1
               git push origin HEAD:main || exit 1
@@ -121,9 +121,9 @@ jobs:
           args=(--record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
           python -m analysis.financials.processing_history "${args[@]}" || exit 1
-          git add -- data/processing_history/
+          git add -- data/processing_history/ || exit 1
           if ! git diff --cached --quiet; then
-            git commit -m "Record Stage 2 processing history"
+            git commit -m "Record Stage 2 processing history" || exit 1
             git fetch origin main || exit 1
             git rebase origin/main || exit 1
             git push origin HEAD:main || exit 1
