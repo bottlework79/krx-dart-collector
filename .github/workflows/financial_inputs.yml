@@ -54,6 +54,9 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: python -m pip install pandas requests
+      - name: Offline Stage 2 batch and resume regression tests
+        working-directory: private
+        run: python -m unittest validation.financials.test_smoke.StageTwoBatchRegressionTests
       - name: Process and checkpoint Stage 2 inputs by year
         working-directory: private
         env:
