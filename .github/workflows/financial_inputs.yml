@@ -3,10 +3,25 @@ on:
   workflow_dispatch:
     inputs:
       stock_code:
-        description: '6-digit ticker'
-        required: true
+        description: '종목코드 6자리 (비우면 1차 DB 기준 배치)'
+        required: false
         type: string
         default: '007860'
+      batch_index:
+        description: '2차 배치 번호 (0부터, 종목코드 공란일 때)'
+        required: false
+        type: number
+        default: 0
+      batch_size:
+        description: '2차 배치 종목 수 (1~25)'
+        required: false
+        type: number
+        default: 2
+      retry_incomplete_only:
+        description: '동일한 1차 원천의 기존 검증 완료 자료 건너뛰기'
+        required: false
+        type: boolean
+        default: true
       start_year:
         description: 'Start reporting year (inclusive)'
         required: true
@@ -39,15 +54,18 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: python -m pip install pandas requests
-      - name: Extract original financial inputs
+      - name: Process and checkpoint Stage 2 inputs by year
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           STOCK_CODE: ${{ inputs.stock_code }}
+          BATCH_INDEX: ${{ inputs.batch_index }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+          RETRY_INCOMPLETE_ONLY: ${{ inputs.retry_incomplete_only }}
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [[ ! "$START_YEAR" =~ ^[0-9]{4}$ || ! "$END_YEAR" =~ ^[0-9]{4}$ ]]; then
             echo "Start and end years must be four digits" >&2
             exit 1
@@ -56,22 +74,59 @@ jobs:
             echo "Invalid year range: $START_YEAR to $END_YEAR" >&2
             exit 1
           fi
-          for (( y=10#$START_YEAR; y<=10#$END_YEAR; y++ )); do
-            echo "::group::Financial inputs $y"
-            python -m collectors.financial.collect_inputs --code "$STOCK_CODE" --year "$y" --enrich-original
-            echo "::endgroup::"
-          done
-      - name: Commit processed inputs
-        working-directory: private
-        run: |
-          set -euo pipefail
+          if [[ -n "$STOCK_CODE" && ! "$STOCK_CODE" =~ ^[0-9]{6}$ ]]; then
+            echo "stock_code must be six digits or empty for a batch" >&2
+            exit 1
+          fi
+          if [[ -z "$STOCK_CODE" ]]; then
+            if [[ ! "$BATCH_INDEX" =~ ^[0-9]+$ || ! "$BATCH_SIZE" =~ ^[0-9]+$ ]] || (( BATCH_SIZE < 1 || BATCH_SIZE > 25 )); then
+              echo "batch_index must be >=0 and batch_size must be 1..25" >&2
+              exit 1
+            fi
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          python -m analysis.financials.processing_history --code "${{ inputs.stock_code }}" --record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          git add -- data/financial_inputs/ data/processing_history/
+          failed=0
+          for (( y=10#$START_YEAR; y<=10#$END_YEAR; y++ )); do
+            echo "::group::Financial inputs $y"
+            args=(--year "$y" --enrich-original)
+            if [[ -n "$STOCK_CODE" ]]; then
+              args+=(--code "$STOCK_CODE")
+            else
+              args+=(--batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE")
+            fi
+            if [[ "$RETRY_INCOMPLETE_ONLY" == "true" ]]; then
+              args+=(--retry-incomplete-only)
+            fi
+            if python -m collectors.financial.collect_inputs "${args[@]}"; then
+              echo "STAGE2_YEAR_COMPLETE $y"
+            else
+              echo "::error::Stage 2 processing failed for year $y; completed records will be kept"
+              failed=1
+            fi
+            # Checkpoint EACH year, even if another period failed.
+            git add -- data/financial_inputs/
+            if ! git diff --cached --quiet; then
+              git commit -m "Update Stage 2 financial inputs ($y)"
+              git fetch origin main || exit 1
+              git rebase origin/main || exit 1
+              git push origin HEAD:main || exit 1
+              echo "STAGE2_YEAR_CHECKPOINT $y"
+            fi
+            echo "::endgroup::"
+          done
+          args=(--record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+          if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
+          python -m analysis.financials.processing_history "${args[@]}" || exit 1
+          git add -- data/processing_history/
           if ! git diff --cached --quiet; then
-            git commit -m "Update annual DART financial inputs"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            git commit -m "Record Stage 2 processing history"
+            git fetch origin main || exit 1
+            git rebase origin/main || exit 1
+            git push origin HEAD:main || exit 1
           fi
+          if (( failed != 0 )); then
+            echo "::error::One or more Stage 2 years had errors; rerun the same batch with retry_incomplete_only=true"
+            exit 1
+          fi
+          echo "STAGE2_ALL_YEARS_COMPLETE"
