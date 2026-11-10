@@ -24,7 +24,7 @@ on:
           - annual
         default: half
       max_stocks:
-        description: '이번 실행 최대 종목 수 (1~25, 공란이면 자동 전체 진행)'
+        description: '이번 실행 최대 종목 수 (1~25, 공란이면 현재 자동연결 안전 테스트)'
         required: false
         type: string
         default: ''
@@ -37,6 +37,15 @@ on:
 permissions:
   contents: read
   actions: write
+
+# Internal safety policy: while this is true, an unlimited user request
+# executes TWO Actions at most, collecting at most 2 stocks per Action.
+# First run receives empty max_stocks; automatic child gets max_stocks=2
+# and therefore cannot dispatch a third run. Switch to false only after
+# checking real child-run creation and persisted stock history.
+env:
+  STAGE1_AUTO_CHAIN_TRIAL: 'true'
+  STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE: '2'
 
 # Keep sequential writes against the private financial database.
 concurrency:
@@ -79,7 +88,13 @@ jobs:
           args=(--stage1-period-plan --year "$YEAR" --report "$REPORT" \
                 --output-file "$RUNNER_TEMP/stage1_period_plan.json")
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
-          if [[ -n "$MAX_STOCKS" ]]; then args+=(--max-stocks "$MAX_STOCKS"); fi
+          if [[ -n "$MAX_STOCKS" ]]; then
+            args+=(--max-stocks "$MAX_STOCKS")
+          elif [[ "$STAGE1_AUTO_CHAIN_TRIAL" == "true" && -z "$STOCK_CODE" && "$FORCE_REFRESH" != "true" ]]; then
+            # Test mode: the first, user-started automatic run is 2 stocks only.
+            args+=(--max-stocks "$STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE")
+            echo "STAGE1_AUTO_TRIAL_FIRST_BATCH size=$STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE"
+          fi
           if [[ "$FORCE_REFRESH" == "true" ]]; then args+=(--force-refresh); fi
           python -m analysis.financials.processing_history "${args[@]}"
           python - "$RUNNER_TEMP/stage1_period_plan.json" "$GITHUB_OUTPUT" <<'PY'
@@ -170,7 +185,14 @@ jobs:
             echo "STAGE1_PERIOD_ALL_STOCKS_FINISHED year=$YEAR report=$REPORT"
             exit 0
           fi
+          next_limit=""
+          if [[ "$STAGE1_AUTO_CHAIN_TRIAL" == "true" ]]; then
+            # A nonblank max_stocks on the child makes its auto-dispatch step
+            # ineligible, so at most one automatic child can be launched.
+            next_limit="$STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE"
+            echo "STAGE1_AUTO_TRIAL_CHILD_LIMIT=$next_limit"
+          fi
           gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f stock_code= -f year="$YEAR" -f report="$REPORT" \
-            -f max_stocks= -f force_refresh=false
-          echo "STAGE1_PERIOD_NEXT_DISPATCHED year=$YEAR report=$REPORT remaining=$pending"
+            -f max_stocks="$next_limit" -f force_refresh=false
+          echo "STAGE1_PERIOD_NEXT_DISPATCHED year=$YEAR report=$REPORT remaining=$pending child_max_stocks=$next_limit"
