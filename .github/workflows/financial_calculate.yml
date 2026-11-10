@@ -40,6 +40,9 @@ jobs:
           python-version: '3.11'
       - name: Install calculation dependencies
         run: python -m pip install pandas lxml html5lib beautifulsoup4
+      - name: Offline regression for signed multiples and null reasons
+        working-directory: private
+        run: python -m unittest validation.financials.test_signed_multiples
       - name: Calculate financial indicators from verified Stage 2 inputs
         working-directory: private
         env:
