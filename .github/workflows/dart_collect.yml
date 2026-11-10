@@ -24,7 +24,7 @@ on:
           - annual
         default: half
       max_stocks:
-        description: '이번 실행 최대 종목 수 (1~25, 공란이면 현재 자동연결 안전 테스트)'
+        description: '이번 실행 최대 종목 수 (1~25, 공란이면 25종목씩 자동 계속 수집)'
         required: false
         type: string
         default: ''
@@ -38,13 +38,11 @@ permissions:
   contents: read
   actions: write
 
-# Internal safety policy: while this is true, an unlimited user request
-# executes TWO Actions at most, collecting at most 2 stocks per Action.
-# First run receives empty max_stocks; automatic child gets max_stocks=2
-# and therefore cannot dispatch a third run. Switch to false only after
-# checking real child-run creation and persisted stock history.
+# Internal trial cap is disabled after successful two-run validation.
+# When max_stocks is blank, the source planner selects up to 25 unfinished
+# stocks each run and dispatches the next run until all are done or a run fails.
 env:
-  STAGE1_AUTO_CHAIN_TRIAL: 'true'
+  STAGE1_AUTO_CHAIN_TRIAL: 'false'
   STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE: '2'
 
 # Keep sequential writes against the private financial database.
