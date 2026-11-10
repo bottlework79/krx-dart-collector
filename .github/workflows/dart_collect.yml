@@ -31,6 +31,11 @@ on:
         required: false
         type: number
         default: 25
+      max_batches:
+        description: 'full_auto 세션 최대 성공 배치 수 (0=무제한, 테스트 권장 2)'
+        required: false
+        type: number
+        default: 0
       start_year:
         description: '원천 수집 시작 연도'
         required: false
@@ -94,6 +99,7 @@ jobs:
           END_YEAR: ${{ inputs.end_year }}
           END_REPORT: ${{ inputs.end_report }}
           BATCH_SIZE: ${{ inputs.batch_size }}
+          MAX_BATCHES: ${{ inputs.max_batches }}
         run: |
           set -euo pipefail
           if [[ -n "$STOCK_CODE" ]]; then
@@ -103,7 +109,8 @@ jobs:
           if [[ -z "$COLLECTION_ID" ]]; then COLLECTION_ID="$GITHUB_RUN_ID"; fi
           python -m analysis.financials.processing_history \
             --stage1-plan --collection-id "$COLLECTION_ID" \
-            --batch-size "$BATCH_SIZE" --start-year "$START_YEAR" \
+            --batch-size "$BATCH_SIZE" --max-batches "$MAX_BATCHES" \
+            --start-year "$START_YEAR" \
             --end-year "$END_YEAR" --end-report "$END_REPORT" \
             --output-file "$RUNNER_TEMP/stage1_plan.json"
           # Save the session plan before any DART reporting-period requests.
@@ -122,6 +129,7 @@ jobs:
           fields = {
               "collection_id": result["collection_id"],
               "complete": str(result["complete"]).lower(),
+              "paused": str(result["paused"]).lower(),
               "batch_index": "" if result["batch_index"] is None else str(result["batch_index"]),
               "codes_csv": ",".join(result["codes"]),
               "total_batches": str(result["total_batches"]),
@@ -132,7 +140,7 @@ jobs:
           PY
       - name: Collect DART statements (always refetch selected reports)
         id: collect
-        if: ${{ inputs.collection_mode != 'full_auto' || steps.plan.outputs.complete == 'false' }}
+        if: ${{ inputs.collection_mode != 'full_auto' || (steps.plan.outputs.complete == 'false' && steps.plan.outputs.paused == 'false') }}
         continue-on-error: true
         working-directory: private
         env:
@@ -212,12 +220,13 @@ jobs:
             exit 1
           fi
       - name: Auto-dispatch next incomplete batch
-        if: ${{ success() && inputs.collection_mode == 'full_auto' && steps.plan.outputs.complete == 'false' }}
+        if: ${{ success() && inputs.collection_mode == 'full_auto' && steps.plan.outputs.complete == 'false' && steps.plan.outputs.paused == 'false' }}
         working-directory: private
         env:
           GH_TOKEN: ${{ github.token }}
           COLLECTION_ID: ${{ steps.plan.outputs.collection_id }}
           BATCH_SIZE: ${{ inputs.batch_size }}
+          MAX_BATCHES: ${{ inputs.max_batches }}
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
           END_REPORT: ${{ inputs.end_report }}
@@ -225,15 +234,22 @@ jobs:
           set -euo pipefail
           python -m analysis.financials.processing_history \
             --stage1-plan --collection-id "$COLLECTION_ID" \
-            --batch-size "$BATCH_SIZE" --start-year "$START_YEAR" \
+            --batch-size "$BATCH_SIZE" --max-batches "$MAX_BATCHES" \
+            --start-year "$START_YEAR" \
             --end-year "$END_YEAR" --end-report "$END_REPORT" \
             --output-file "$RUNNER_TEMP/stage1_next.json"
-          if [[ "$(python -c 'import json,sys;print(str(json.load(open(sys.argv[1]))["complete"]).lower())' "$RUNNER_TEMP/stage1_next.json")" == "true" ]]; then
+          state="$(python -c 'import json,sys;d=json.load(open(sys.argv[1]));print("complete" if d["complete"] else "paused" if d["paused"] else "continue")' "$RUNNER_TEMP/stage1_next.json")"
+          if [[ "$state" == "complete" ]]; then
             echo "STAGE1_COLLECTION_COMPLETE $COLLECTION_ID"
+            exit 0
+          fi
+          if [[ "$state" == "paused" ]]; then
+            echo "STAGE1_COLLECTION_PAUSED collection_id=$COLLECTION_ID max_batches=$MAX_BATCHES"
             exit 0
           fi
           gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f collection_mode=full_auto -f collection_id="$COLLECTION_ID" \
             -f stock_code= -f batch_index=0 -f batch_size="$BATCH_SIZE" \
+            -f max_batches="$MAX_BATCHES" \
             -f start_year="$START_YEAR" -f end_year="$END_YEAR" -f end_report="$END_REPORT"
           echo "STAGE1_NEXT_DISPATCHED collection_id=$COLLECTION_ID"
