@@ -79,6 +79,9 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: python -m pip install requests pandas
+      - name: Offline Stage 1 checkpoint regression tests
+        working-directory: private
+        run: python -m unittest validation.financials.test_smoke.StageOneHistoryResumptionTests
       - name: Prepare fixed Stage 1 universe and choose first incomplete batch
         id: plan
         if: ${{ inputs.collection_mode == 'full_auto' }}
