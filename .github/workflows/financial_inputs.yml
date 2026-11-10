@@ -67,7 +67,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- data/financial_inputs/
+          python -m analysis.financials.processing_history --code "${{ inputs.stock_code }}" --record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          git add -- data/financial_inputs/ data/processing_history/
           if ! git diff --cached --quiet; then
             git commit -m "Update annual DART financial inputs"
             git fetch origin main
