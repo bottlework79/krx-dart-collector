@@ -1,0 +1,44 @@
+name: Financial Collection Statistics
+on:
+  workflow_dispatch:
+    inputs:
+      stock_code:
+        description: '6-digit stock code (blank = all)'
+        required: false
+        default: '007860'
+        type: string
+      start_year:
+        description: 'First fiscal year (blank = detected first)'
+        required: false
+        default: '2015'
+        type: string
+      end_year:
+        description: 'Last fiscal year (blank = detected last)'
+        required: false
+        default: '2026'
+        type: string
+permissions:
+  contents: read
+jobs:
+  statistics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - name: Read actual financial databases and summarize
+        working-directory: private
+        env:
+          STOCK_CODE: ${{ inputs.stock_code }}
+          START_YEAR: ${{ inputs.start_year }}
+          END_YEAR: ${{ inputs.end_year }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
+          if [[ -n "$START_YEAR" ]]; then args+=(--start-year "$START_YEAR"); fi
+          if [[ -n "$END_YEAR" ]]; then args+=(--end-year "$END_YEAR"); fi
+          python -m analysis.financials.processing_statistics "${args[@]}"
