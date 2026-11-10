@@ -3,28 +3,41 @@ name: DART Financial Statement Collection
 on:
   workflow_dispatch:
     inputs:
+      collection_mode:
+        description: '단일 배치 또는 전체 자동 수집'
+        required: true
+        type: choice
+        options:
+          - single_batch
+          - full_auto
+        default: single_batch
+      collection_id:
+        description: '전체 수집 재개 세션 ID (새 수집은 공란; 최초 run ID 재사용)'
+        required: false
+        type: string
+        default: ''
       stock_code:
-        description: '종목코드 6자리 (입력 시 해당 종목, 비우면 배치)'
+        description: '단일 종목코드 6자리 (전체 자동은 공란)'
         required: false
         type: string
         default: ''
       batch_index:
-        description: '배치 번호 (0부터)'
+        description: '단일 배치 번호 (0부터; 전체 자동에서는 무시)'
         required: false
         type: number
         default: 0
       batch_size:
-        description: '배치 종목 수 (1~25)'
+        description: '배치당 종목 수 (1~25)'
         required: false
         type: number
-        default: 2
+        default: 25
       start_year:
-        description: '수집 시작 연도 (2015년은 TTM 계산용 보조자료)'
+        description: '원천 수집 시작 연도'
         required: false
         type: number
         default: 2015
       end_report:
-        description: '종료 연도 마지막 보고서 (q1, half, q3, annual)'
+        description: '종료 연도 마지막 보고서'
         required: false
         type: choice
         options:
@@ -34,14 +47,16 @@ on:
           - q3
         default: half
       end_year:
-        description: '수집 종료 연도 (기본 2026년, 미공시 분기는 자동 제외)'
+        description: '원천 수집 종료 연도'
         required: false
         type: number
         default: 2026
 
 permissions:
   contents: read
+  actions: write
 
+# Auto-dispatched follow-up jobs run serially, also serialized with Stage 2.
 concurrency:
   group: dart-private-collection
   cancel-in-progress: false
@@ -64,39 +79,157 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: python -m pip install requests pandas
-      - name: Collect DART statements
+      - name: Prepare fixed Stage 1 universe and choose first incomplete batch
+        id: plan
+        if: ${{ inputs.collection_mode == 'full_auto' }}
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          COLLECTION_ID: ${{ inputs.collection_id }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+          START_YEAR: ${{ inputs.start_year }}
+          END_YEAR: ${{ inputs.end_year }}
+          END_REPORT: ${{ inputs.end_report }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$STOCK_CODE" ]]; then
+            echo "full_auto requires stock_code to be blank" >&2
+            exit 1
+          fi
+          if [[ -z "$COLLECTION_ID" ]]; then COLLECTION_ID="$GITHUB_RUN_ID"; fi
+          python -m analysis.financials.processing_history \
+            --stage1-plan --collection-id "$COLLECTION_ID" \
+            --batch-size "$BATCH_SIZE" --start-year "$START_YEAR" \
+            --end-year "$END_YEAR" --end-report "$END_REPORT" \
+            --output-file "$RUNNER_TEMP/stage1_plan.json"
+          # Save the session plan before any DART reporting-period requests.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/processing_history/runs.jsonl
+          if ! git diff --cached --quiet; then
+            git commit -m "Initialize Stage 1 collection session $COLLECTION_ID"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+          python - "$RUNNER_TEMP/stage1_plan.json" "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          result = json.load(open(sys.argv[1], encoding="utf-8"))
+          fields = {
+              "collection_id": result["collection_id"],
+              "complete": str(result["complete"]).lower(),
+              "batch_index": "" if result["batch_index"] is None else str(result["batch_index"]),
+              "codes_csv": ",".join(result["codes"]),
+              "total_batches": str(result["total_batches"]),
+          }
+          with open(sys.argv[2], "a", encoding="utf-8") as f:
+              for key, value in fields.items():
+                  f.write(f"{key}={value}\n")
+          PY
+      - name: Collect DART statements (always refetch selected reports)
+        id: collect
+        if: ${{ inputs.collection_mode != 'full_auto' || steps.plan.outputs.complete == 'false' }}
+        continue-on-error: true
+        working-directory: private
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          COLLECTION_MODE: ${{ inputs.collection_mode }}
           STOCK_CODE: ${{ inputs.stock_code }}
           BATCH_INDEX: ${{ inputs.batch_index }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+          FROZEN_CODES: ${{ steps.plan.outputs.codes_csv }}
+          FROZEN_BATCH_INDEX: ${{ steps.plan.outputs.batch_index }}
+          START_YEAR: ${{ inputs.start_year }}
+          END_YEAR: ${{ inputs.end_year }}
+          END_REPORT: ${{ inputs.end_report }}
+        run: |
+          set -euo pipefail
+          args=(--start-year "$START_YEAR" --end-year "$END_YEAR" \
+                --end-report "$END_REPORT" --batch-size "$BATCH_SIZE" \
+                --batch-index "$BATCH_INDEX")
+          if [[ "$COLLECTION_MODE" == "full_auto" ]]; then
+            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" \
+                  --end-report "$END_REPORT" --batch-size "$BATCH_SIZE" \
+                  --batch-index "$FROZEN_BATCH_INDEX" --batch-codes "$FROZEN_CODES")
+          elif [[ -n "$STOCK_CODE" ]]; then
+            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" \
+                  --end-report "$END_REPORT" --batch-size 1 --batch-index 0 \
+                  --code "$STOCK_CODE")
+          fi
+          python -m collectors.dart.collect_dart "${args[@]}"
+      - name: Persist collected DB and batch history, including failed batches
+        if: ${{ always() && (steps.collect.outcome == 'success' || steps.collect.outcome == 'failure') }}
+        working-directory: private
+        env:
+          COLLECTION_MODE: ${{ inputs.collection_mode }}
+          COLLECTION_ID: ${{ steps.plan.outputs.collection_id }}
+          BATCH_INDEX: ${{ steps.plan.outputs.batch_index }}
+          STOCK_CODE: ${{ inputs.stock_code }}
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The collector saves successful periods even if some DART requests fail.
+          git add -- data/financial_statements/ data/unavailable_periods.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update private DART statements (run $GITHUB_RUN_ID)"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+          if [[ "$COLLECTION_MODE" == "full_auto" ]]; then
+            state=success
+            if [[ "$COLLECT_OUTCOME" != "success" ]]; then state=failure; fi
+            python -m analysis.financials.processing_history \
+              --stage1-record-batch --collection-id "$COLLECTION_ID" \
+              --batch-index "$BATCH_INDEX" --run-id "$GITHUB_RUN_ID" \
+              --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              --outcome "$state"
+          else
+            # Preserve the preexisting single-batch history view on successful runs.
+            if [[ "$COLLECT_OUTCOME" == "success" ]]; then
+              args=(--record-stage stage1 --run-id "$GITHUB_RUN_ID" \
+                    --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+              if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
+              python -m analysis.financials.processing_history "${args[@]}"
+            fi
+          fi
+          git add -- data/processing_history/
+          if ! git diff --cached --quiet; then
+            git commit -m "Record DART collection outcome (run $GITHUB_RUN_ID)"
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+          if [[ "$COLLECT_OUTCOME" != "success" ]]; then
+            echo "::error::DART collection failed. Saved successful periods; resume full_auto with collection_id=$COLLECTION_ID"
+            exit 1
+          fi
+      - name: Auto-dispatch next incomplete batch
+        if: ${{ success() && inputs.collection_mode == 'full_auto' && steps.plan.outputs.complete == 'false' }}
+        working-directory: private
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COLLECTION_ID: ${{ steps.plan.outputs.collection_id }}
           BATCH_SIZE: ${{ inputs.batch_size }}
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
           END_REPORT: ${{ inputs.end_report }}
         run: |
           set -euo pipefail
-          args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --end-report "$END_REPORT" --batch-size "$BATCH_SIZE" --batch-index "$BATCH_INDEX")
-          if [[ -n "$STOCK_CODE" ]]; then
-            args=(--start-year "$START_YEAR" --end-year "$END_YEAR" --end-report "$END_REPORT" --batch-size 1 --batch-index 0 --code "$STOCK_CODE")
+          python -m analysis.financials.processing_history \
+            --stage1-plan --collection-id "$COLLECTION_ID" \
+            --batch-size "$BATCH_SIZE" --start-year "$START_YEAR" \
+            --end-year "$END_YEAR" --end-report "$END_REPORT" \
+            --output-file "$RUNNER_TEMP/stage1_next.json"
+          if [[ "$(python -c 'import json,sys;print(str(json.load(open(sys.argv[1]))["complete"]).lower())' "$RUNNER_TEMP/stage1_next.json")" == "true" ]]; then
+            echo "STAGE1_COLLECTION_COMPLETE $COLLECTION_ID"
+            exit 0
           fi
-          python -m collectors.dart.collect_dart "${args[@]}"
-      - name: Commit private DART database
-        working-directory: private
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          args=(--record-stage stage1 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
-          if [[ -n "${{ inputs.stock_code }}" ]]; then args+=(--code "${{ inputs.stock_code }}"); fi
-          python -m analysis.financials.processing_history "${args[@]}"
-          git add -- data/financial_statements/ data/unavailable_periods.json data/processing_history/
-          if git diff --cached --quiet; then
-            echo "재무 DB 변경 없음"
-          else
-            git commit -m "Update private DART statements"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
-            echo "재무 DB 저장 완료"
-          fi
+          gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f collection_mode=full_auto -f collection_id="$COLLECTION_ID" \
+            -f stock_code= -f batch_index=0 -f batch_size="$BATCH_SIZE" \
+            -f start_year="$START_YEAR" -f end_year="$END_YEAR" -f end_report="$END_REPORT"
+          echo "STAGE1_NEXT_DISPATCHED collection_id=$COLLECTION_ID"
