@@ -87,7 +87,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- data/financial_statements/ data/unavailable_periods.json
+          args=(--record-stage stage1 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+          if [[ -n "${{ inputs.stock_code }}" ]]; then args+=(--code "${{ inputs.stock_code }}"); fi
+          python -m analysis.financials.processing_history "${args[@]}"
+          git add -- data/financial_statements/ data/unavailable_periods.json data/processing_history/
           if git diff --cached --quiet; then
             echo "재무 DB 변경 없음"
           else
