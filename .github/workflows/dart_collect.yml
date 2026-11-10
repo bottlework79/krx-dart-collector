@@ -191,13 +191,14 @@ jobs:
               --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
               --outcome "$state"
           else
-            # Preserve the preexisting single-batch history view on successful runs.
-            if [[ "$COLLECT_OUTCOME" == "success" ]]; then
-              args=(--record-stage stage1 --run-id "$GITHUB_RUN_ID" \
-                    --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
-              if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
-              python -m analysis.financials.processing_history "${args[@]}"
-            fi
+            # Existing per-run history also records manual-batch failures.
+            state=success
+            if [[ "$COLLECT_OUTCOME" != "success" ]]; then state=failure; fi
+            args=(--record-stage stage1 --run-id "$GITHUB_RUN_ID" \
+                  --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+                  --outcome "$state")
+            if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
+            python -m analysis.financials.processing_history "${args[@]}"
           fi
           git add -- data/processing_history/
           if ! git diff --cached --quiet; then
