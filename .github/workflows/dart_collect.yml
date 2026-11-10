@@ -70,7 +70,10 @@ jobs:
         run: python -m pip install requests pandas
       - name: Offline Stage 1 period-history regression tests
         working-directory: private
-        run: python -m unittest validation.financials.test_smoke.StageOnePeriodResumeTests
+        run: |
+          python -m unittest \
+            validation.financials.test_smoke.StageOnePeriodResumeTests \
+            validation.financials.test_smoke.StageOneCorpCodeCacheTests
       - name: Choose next stocks using saved per-period history
         id: plan
         working-directory: private
