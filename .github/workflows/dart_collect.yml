@@ -24,7 +24,7 @@ on:
           - annual
         default: half
       max_stocks:
-        description: '이번 실행 최대 종목 수 (1~25, 공란이면 25종목씩 자동 계속 수집)'
+        description: '이번 실행 최대 종목 수 (1~100, 공란이면 100종목씩 자동 계속 수집)'
         required: false
         type: string
         default: ''
@@ -39,7 +39,7 @@ permissions:
   actions: write
 
 # Internal trial cap is disabled after successful two-run validation.
-# When max_stocks is blank, the source planner selects up to 25 unfinished
+# When max_stocks is blank, the source planner selects up to 100 unfinished
 # stocks each run and dispatches the next run until all are done or a run fails.
 env:
   STAGE1_AUTO_CHAIN_TRIAL: 'false'
@@ -73,7 +73,8 @@ jobs:
         run: |
           python -m unittest \
             validation.financials.test_smoke.StageOnePeriodResumeTests \
-            validation.financials.test_smoke.StageOneCorpCodeCacheTests
+            validation.financials.test_smoke.StageOneCorpCodeCacheTests \
+            validation.financials.test_smoke.StageOneHundredStockBatchTests
       - name: Choose next stocks using saved per-period history
         id: plan
         working-directory: private
@@ -120,7 +121,7 @@ jobs:
           set -euo pipefail
           # Collector refreshes every selected report, even if an old DB row exists.
           python -m collectors.dart.collect_dart \
-            --batch-codes "$CODES_CSV" --batch-size 25 \
+            --batch-codes "$CODES_CSV" --batch-size 100 \
             --start-year "$YEAR" --end-year "$YEAR" \
             --end-report "$REPORT" --only-report "$REPORT" \
             --result-file "$RUNNER_TEMP/stage1_period_results.json"
