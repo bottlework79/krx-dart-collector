@@ -1,0 +1,83 @@
+name: Trend ML - Reversal and Continuation
+
+# Manual first: training and inference must not interfere with DART collection.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'train: 학습+시간순 검증+전체 종목 점수 / predict: 기존 모델로 점수 갱신'
+        required: true
+        default: 'train'
+        type: choice
+        options:
+          - train
+          - predict
+      validation_start:
+        description: '학습/검증 날짜 경계 (train 전용; 예: 2025-01-01)'
+        required: false
+        default: '2025-01-01'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trend-ml-manual
+  cancel-in-progress: false
+
+jobs:
+  trend-ml:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private implementation and KRX database
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install model dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Run offline trend ML checks
+        working-directory: private
+        run: python -m unittest discover -s validation/ml -p 'test_*.py' -v
+      - name: Train or predict using private yearly KRX data
+        working-directory: private
+        env:
+          TREND_MODE: ${{ inputs.mode }}
+          VALIDATION_START: ${{ inputs.validation_start }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.trend --mode "$TREND_MODE" --validation-start "$VALIDATION_START"
+      - name: Commit results only to private repository
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- data/ml/trend/
+          if git diff --cached --quiet; then
+            echo 'TREND_ML_NO_CHANGES'
+          else
+            git commit -m "Update private trend ML models and scores" > /dev/null
+            git fetch origin main > /tmp/trend_ml_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/trend_ml_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo '::error::TREND_ML_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/trend_ml_push.log 2>&1; then
+              echo '::error::TREND_ML_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'TREND_ML_PRIVATE_SAVED=true'
+          fi
+# No public model weights, ticker scores, or private database artifacts.
