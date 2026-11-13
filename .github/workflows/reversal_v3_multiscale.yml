@@ -1,0 +1,75 @@
+name: Reversal V3 - Multiscale CNN 60 120 200
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reversal-v3-multiscale-private
+  cancel-in-progress: false
+
+jobs:
+  validate-multiscale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private KRX history, V3 reference scores and ML implementation
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU machine-learning dependencies
+        run: |
+          python -m pip install pandas numpy scikit-learn joblib
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run multiscale architecture and V3 target regression tests
+        working-directory: private
+        run: |
+          python -m unittest \
+            validation.ml.test_reversal_v3_multiscale \
+            validation.ml.test_reversal_v3 \
+            validation.ml.test_reversal_v2 \
+            -v
+      - name: Train 60-120-200 CNN with identical V3 purged year folds
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.reversal_v3_multiscale \
+            --validation-years 2022 2023 2024 2025 \
+            --epochs 3 --batch-size 256 --window 200 --seed 42
+      - name: Save only new V3 multiscale research outputs privately
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/reversal_v3_multiscale/
+          if git diff --cached --quiet; then
+            echo 'MULTISCALE_V3_NO_CHANGES'
+          else
+            git commit -m 'Update private V3 multiscale CNN paired walk-forward results' > /dev/null
+            git fetch origin main > /tmp/multiscale_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/multiscale_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo '::error::MULTISCALE_V3_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/multiscale_push.log 2>&1; then
+              echo '::error::MULTISCALE_V3_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'MULTISCALE_V3_PRIVATE_SAVED=true'
+          fi
+
+# Research-only; no V1/V2 or original V3 operational model/scores are overwritten.
