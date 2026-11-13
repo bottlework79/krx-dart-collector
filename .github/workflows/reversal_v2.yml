@@ -1,0 +1,90 @@
+name: Reversal V2 - Confirmed Early Turn
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'train: 새 전환 정답으로 학습+검증 / predict: V2 모델 점수 갱신'
+        required: true
+        default: 'train'
+        type: choice
+        options:
+          - train
+          - predict
+      validation_start:
+        description: '시계열 검증 시작일 (train 전용)'
+        required: false
+        default: '2025-01-01'
+        type: string
+      epochs:
+        description: 'CNN 학습 반복 횟수 (train 전용)'
+        required: false
+        default: '3'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reversal-v2-manual
+  cancel-in-progress: false
+
+jobs:
+  reversal-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private implementation and KRX history
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install pandas numpy scikit-learn joblib
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify historical target and existing ML tests
+        working-directory: private
+        run: python -m unittest discover -s validation/ml -p 'test_*.py' -v
+      - name: Train V2 or score current-day reversal candidates
+        working-directory: private
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          SPLIT: ${{ inputs.validation_start }}
+          EPOCHS: ${{ inputs.epochs }}
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.reversal_v2 --mode "$MODE" --validation-start "$SPLIT" --epochs "$EPOCHS"
+      - name: Save only V2 outputs in private repository
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/reversal_v2/
+          if git diff --cached --quiet; then
+            echo 'REVERSAL_V2_NO_CHANGES'
+          else
+            git commit -m 'Update private reversal V2 models and early warning scores' > /dev/null
+            git fetch origin main > /tmp/reversal_v2_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/reversal_v2_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo '::error::REVERSAL_V2_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/reversal_v2_push.log 2>&1; then
+              echo '::error::REVERSAL_V2_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'REVERSAL_V2_PRIVATE_SAVED=true'
+          fi
+# No raw OHLCV, per-symbol rankings or weights are uploaded to public Actions artifacts.
