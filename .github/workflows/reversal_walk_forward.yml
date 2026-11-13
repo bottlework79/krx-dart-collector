@@ -1,0 +1,87 @@
+name: Reversal Walk-Forward - 2022 to 2025
+
+on:
+  workflow_dispatch:
+    inputs:
+      validation_years:
+        description: '평가 연도 (공백으로 구분, 기본 2022~2025)'
+        required: false
+        type: string
+        default: '2022 2023 2024 2025'
+      epochs:
+        description: '각 연도별 CNN 학습 반복 횟수'
+        required: false
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reversal-walk-forward-private
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private KRX database and ML code
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU learning dependencies
+        run: |
+          python -m pip install pandas numpy scikit-learn joblib
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Run offline walk-forward and existing ML regressions
+        working-directory: private
+        run: python -m unittest discover -s validation/ml -p 'test_*.py' -v
+      - name: Evaluate expanding historical periods
+        working-directory: private
+        shell: bash
+        env:
+          YEARS: ${{ inputs.validation_years }}
+          EPOCHS: ${{ inputs.epochs }}
+        run: |
+          set -euo pipefail
+          read -ra selected_years <<< "$YEARS"
+          if [[ "${#selected_years[@]}" -lt 1 ]]; then
+            echo "::error::At least one validation year required"
+            exit 1
+          fi
+          python -m analysis.ml.reversal_walk_forward \
+            --validation-years "${selected_years[@]}" --epochs "$EPOCHS"
+      - name: Save walk-forward results only to the private repository
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/reversal_walk_forward/
+          if git diff --cached --quiet; then
+            echo 'WALK_FORWARD_NO_CHANGES'
+          else
+            git commit -m 'Update private reversal walk-forward validation results' > /dev/null
+            git fetch origin main > /tmp/walk_forward_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/walk_forward_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo '::error::WALK_FORWARD_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/walk_forward_push.log 2>&1; then
+              echo '::error::WALK_FORWARD_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'WALK_FORWARD_PRIVATE_SAVED=true'
+          fi
+# Evaluates historical years only. Never modifies the operational V2 model.
