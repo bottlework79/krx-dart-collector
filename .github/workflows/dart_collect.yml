@@ -33,6 +33,11 @@ on:
         required: false
         type: boolean
         default: false
+      continue_periods:
+        description: '현재 보고서 완료 후 다음 분기/연도로 자동 전환하여 최신 제출 완료 기간까지 진행'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,8 @@ permissions:
 
 # Internal trial cap is disabled after successful two-run validation.
 # When max_stocks is blank, the source planner selects up to 100 unfinished
-# stocks each run and dispatches the next run until all are done or a run fails.
+# stocks each run; continue_periods=true also advances the reporting period
+# chronologically once that period has no unfinished stocks. Other runs are unchanged.
 env:
   STAGE1_AUTO_CHAIN_TRIAL: 'false'
   STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE: '2'
@@ -74,7 +80,8 @@ jobs:
           python -m unittest \
             validation.financials.test_smoke.StageOnePeriodResumeTests \
             validation.financials.test_smoke.StageOneCorpCodeCacheTests \
-            validation.financials.test_smoke.StageOneHundredStockBatchTests
+            validation.financials.test_smoke.StageOneHundredStockBatchTests \
+            validation.financials.test_stage1_period_sequence
       - name: Choose next stocks using saved per-period history
         id: plan
         working-directory: private
@@ -168,16 +175,18 @@ jobs:
             echo "::error::Collection had failed stocks; saved successful results and recorded failures"
             exit 1
           fi
-      - name: Continue all-stock run only when no manual limit was provided
-        if: ${{ success() && steps.plan.outputs.has_work == 'true' && inputs.stock_code == '' && inputs.max_stocks == '' && !inputs.force_refresh }}
+      - name: Continue unfinished stocks and optionally next reporting periods
+        if: ${{ success() && inputs.stock_code == '' && inputs.max_stocks == '' && !inputs.force_refresh }}
         working-directory: private
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           YEAR: ${{ inputs.year }}
           REPORT: ${{ inputs.report }}
+          CONTINUE_PERIODS: ${{ inputs.continue_periods }}
         run: |
           set -euo pipefail
+          # Re-plan AFTER the results were committed and verified in history.
           python -m analysis.financials.processing_history \
             --stage1-period-plan --year "$YEAR" --report "$REPORT" \
             --output-file "$RUNNER_TEMP/stage1_followup_plan.json"
@@ -188,16 +197,37 @@ jobs:
           )"
           if [[ "$pending" == "0" ]]; then
             echo "STAGE1_PERIOD_ALL_STOCKS_FINISHED year=$YEAR report=$REPORT"
-            exit 0
+            if [[ "$CONTINUE_PERIODS" != "true" ]]; then
+              exit 0
+            fi
+            # Safe reporting boundary: don't mark immature quarter filings as missing.
+            python -m analysis.financials.processing_history \
+              --stage1-next-period --year "$YEAR" --report "$REPORT" \
+              --output-file "$RUNNER_TEMP/stage1_next_period.json"
+            mapfile -t next < <(python - "$RUNNER_TEMP/stage1_next_period.json" <<'PY'
+          import json,sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          print("true" if data["has_next"] else "false")
+          print(data["next_year"] if data["has_next"] else "")
+          print(data["next_report"] if data["has_next"] else "")
+          PY
+            )
+            if [[ "${next[0]}" != "true" ]]; then
+              echo "STAGE1_BACKFILL_LATEST_MATURE_PERIOD_REACHED year=$YEAR report=$REPORT"
+              exit 0
+            fi
+            YEAR="${next[1]}"
+            REPORT="${next[2]}"
+            echo "STAGE1_BACKFILL_ADVANCE year=$YEAR report=$REPORT"
           fi
           next_limit=""
           if [[ "$STAGE1_AUTO_CHAIN_TRIAL" == "true" ]]; then
-            # A nonblank max_stocks on the child makes its auto-dispatch step
-            # ineligible, so at most one automatic child can be launched.
+            # Two-run-only regression mode remains bounded for ordinary jobs.
             next_limit="$STAGE1_AUTO_CHAIN_TRIAL_BATCH_SIZE"
             echo "STAGE1_AUTO_TRIAL_CHILD_LIMIT=$next_limit"
           fi
           gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f stock_code= -f year="$YEAR" -f report="$REPORT" \
-            -f max_stocks="$next_limit" -f force_refresh=false
-          echo "STAGE1_PERIOD_NEXT_DISPATCHED year=$YEAR report=$REPORT remaining=$pending child_max_stocks=$next_limit"
+            -f max_stocks="$next_limit" -f force_refresh=false \
+            -f continue_periods="$CONTINUE_PERIODS"
+          echo "STAGE1_NEXT_DISPATCHED year=$YEAR report=$REPORT pending_previous=$pending auto_advance=$CONTINUE_PERIODS"
