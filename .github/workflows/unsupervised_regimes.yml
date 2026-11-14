@@ -1,0 +1,96 @@
+name: Unsupervised KRX Price Regimes - 6 State Walk-Forward
+
+on:
+  workflow_dispatch:
+    inputs:
+      validation_years:
+        description: '검증 연도: 공백으로 구분 (기본 2022~2025)'
+        required: false
+        type: string
+        default: '2022 2023 2024 2025'
+      clusters:
+        description: '사전 고정 군집 수 (기본 6)'
+        required: false
+        type: string
+        default: '6'
+  push:
+    paths:
+      - '.github/workflows/unsupervised_regimes.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-unsupervised-regimes-research
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private OHLCV and unsupervised research code
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install compact classical-ML stack (no Torch)
+        run: |
+          python -m pip install numpy pandas scikit-learn joblib
+      - name: Run unsupervised causal and historical validation unit tests
+        working-directory: private
+        run: python -m unittest validation.ml.test_unsupervised_regimes -v
+      - name: Discover six historical price regimes and audit OOS transitions
+        working-directory: private
+        shell: bash
+        env:
+          YEARS: ${{ inputs.validation_years || '2022 2023 2024 2025' }}
+          CLUSTERS: ${{ inputs.clusters || '6' }}
+        run: |
+          set -euo pipefail
+          read -ra selected_years <<< "$YEARS"
+          if (( ${#selected_years[@]} == 0 )); then
+            echo "::error::At least one validation year required"
+            exit 1
+          fi
+          python -m analysis.ml.unsupervised_regimes \
+            --validation-years "${selected_years[@]}" \
+            --clusters "$CLUSTERS" \
+            --stride 10 \
+            --max-fit-samples 100000 \
+            --seed 42
+      - name: Save research outputs and latest unlabeled model privately
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/unsupervised_regimes/
+          if git diff --cached --quiet; then
+            echo 'UNSUPERVISED_REGIMES_UNCHANGED=true'
+          else
+            git commit -m 'Save private unlabeled price-regime states and purged validation' > /dev/null
+            git fetch origin main > /tmp/unsupervised_fetch.log 2>&1
+            if ! git rebase origin/main > /tmp/unsupervised_rebase.log 2>&1; then
+              git rebase --abort > /dev/null 2>&1 || true
+              echo '::error::REGIME_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main > /tmp/unsupervised_push.log 2>&1; then
+              echo '::error::REGIME_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'UNSUPERVISED_REGIMES_PRIVATE_SAVED=true'
+          fi
+
+# Only a new research directory is written. Financial/price collection, V2/V3
+# weights, scores, and previous result folders are never modified.
+# The initial push of this workflow starts the first dry-run automatically.
