@@ -73,7 +73,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$EVENT" == "push" ]]; then
-            days=30
+            # Full-size safe resumable batch when this workflow is updated.
+            days=200
           elif [[ "$EVENT" == "schedule" ]]; then
             days=200
           else
