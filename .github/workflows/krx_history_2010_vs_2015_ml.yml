@@ -62,7 +62,7 @@ jobs:
           import os
           from pathlib import Path
           from collectors.price.historical_backfill import read_manifest, status
-          doc = read_manifest(Path("data/krx_history_2010_2014.json"))
+          doc = read_manifest(Path("data/historical_krx_2010_2014/manifest.json"))
           st = status(doc, "data")
           output = Path("data/ml/unsupervised_historical_2010_vs_2015/summary.json")
           ready = st["complete"] and (not output.exists() or os.environ.get("FORCE") == "true")
