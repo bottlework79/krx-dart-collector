@@ -1,0 +1,119 @@
+name: Historical KRX 2010-2014 Backfill (As-Of Universe)
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_days:
+        description: '한 번에 확인할 과거 평일 수 (기본 200, 최대 260)'
+        type: number
+        required: false
+        default: 200
+      probe_only:
+        description: '2010년과 2014년 API 자료만 읽고 DB는 변경하지 않음'
+        type: boolean
+        required: false
+        default: false
+  push:
+    paths:
+      - '.github/workflows/krx_historical_2010_2014.yml'
+  schedule:
+    # Continue bounded archived data batches; no-op once all dates checked.
+    # 09:10/15:10/21:10/03:10 Korea time.
+    - cron: '10 0,6,12,18 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: historical-krx-2010-2014-private-shards
+  cancel-in-progress: false
+
+jobs:
+  historical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    steps:
+      - name: Checkout private historical KRX collection source
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Configure Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install historical KRX dependencies
+        run: |
+          python -m pip install pandas numpy requests finance-datareader
+      - name: Test as-of-date collection and resumable checkpoints without network
+        working-directory: private
+        run: |
+          python -m unittest validation.prices.test_historical_backfill -v
+      - name: Probe authenticated official KRX historical data (both markets, 2010 & 2014)
+        working-directory: private
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+        run: |
+          python -m collectors.price.historical_backfill --mode probe
+      - name: Backfill strictly pre-2015 shards with historical as-of universe
+        if: ${{ inputs.probe_only != true }}
+        working-directory: private
+        shell: bash
+        env:
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+          MAX_DAYS: ${{ inputs.max_days }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == "push" ]]; then
+            days=30
+          elif [[ "$EVENT" == "schedule" ]]; then
+            days=200
+          else
+            days="${MAX_DAYS:-200}"
+          fi
+          if [[ ! "$days" =~ ^[0-9]+$ ]] || (( days < 1 || days > 260 )); then
+            echo "::error::max_days must be between 1 and 260"
+            exit 1
+          fi
+          python -m collectors.price.historical_backfill \
+            --mode backfill --max-days "$days"
+      - name: Commit only 2010-2014 historical KRX annual shards & manifest privately
+        if: ${{ success() && inputs.probe_only != true }}
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- data/market_201[0-4].pkl.gz data/krx_history_2010_2014.json
+          python - <<'PY'
+          from pathlib import Path
+          for path in Path("data").glob("market_201[0-4].pkl.gz"):
+              if path.stat().st_size > 100*1024*1024:
+                  raise SystemExit(f"historical shard exceeds GitHub 100 MiB: {path.name}")
+              print(f"HISTORIC_PRIVATE_ARCHIVE={path.name} bytes={path.stat().st_size}")
+          PY
+          if git diff --cached --quiet; then
+            echo 'KRX_HISTORIC_NO_NEW_CHECKPOINT=true'
+          else
+            git commit -m 'Checkpoint as-of-date KRX 2010-2014 old market archive' > /dev/null
+            git fetch origin main >/tmp/krx_old_fetch.log 2>&1
+            if ! git rebase origin/main >/tmp/krx_old_rebase.log 2>&1; then
+              git rebase --abort >/dev/null 2>&1 || true
+              echo '::error::KRX_HISTORIC_REBASE_CONFLICT; no force push'
+              exit 1
+            fi
+            if ! git push origin HEAD:main >/tmp/krx_old_push.log 2>&1; then
+              echo '::error::KRX_HISTORIC_PRIVATE_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'KRX_HISTORIC_PRIVATE_SAVED=true'
+          fi
+
+# The workflow does not write any source or data into public GitHub;
+# it touches ONLY private data/market_2010..2014.pkl.gz and manifest.
+# No 2015+ price files, daily collection, V2/V3 or ML validation result changes.
