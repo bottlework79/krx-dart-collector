@@ -1,0 +1,115 @@
+name: KRX ML - Compare 2010 vs 2015 Training History
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_recheck:
+        description: '이미 비교 결과가 있어도 다시 비교 실행'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - '.github/workflows/krx_history_2010_vs_2015_ml.yml'
+  schedule:
+    # Readiness check after the bounded 2010-2014 archive's scheduled batches.
+    - cron: '40 5 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-history-2010-vs-2015-training-audit
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    steps:
+      - name: Checkout private historical and existing annual OHLCV shards
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install unsupervised model and historic data dependencies
+        run: |
+          python -m pip install pandas numpy scikit-learn joblib requests finance-datareader
+      - name: Verify 2010-vs-2015 training isolation and prior time-safe feature tests
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m unittest \
+            validation.ml.test_historical_training_comparison \
+            validation.ml.test_unsupervised_regimes \
+            validation.prices.test_historical_backfill -v
+      - name: Check completed historic archive and avoid repeat training
+        id: ready
+        working-directory: private
+        env:
+          FORCE: ${{ inputs.force_recheck }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from collectors.price.historical_backfill import read_manifest, status
+          doc = read_manifest(Path("data/krx_history_2010_2014.json"))
+          st = status(doc, "data")
+          output = Path("data/ml/unsupervised_historical_2010_vs_2015/summary.json")
+          ready = st["complete"] and (not output.exists() or os.environ.get("FORCE") == "true")
+          print("HISTORIC_TRAINING_READY_CHECK", {
+              "complete": st["complete"],
+              "checked": st["checked"],
+              "expected": st["total_weekdays"],
+              "output_exists": output.exists(),
+              "run":ready,
+          })
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as fd:
+              fd.write(f"run={'true' if ready else 'false'}\n")
+          PY
+      - name: Compare 2010 and 2015 training histories on identical 2022-2025 test anchors
+        if: ${{ steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.historical_training_comparison \
+            --years 2022 2023 2024 2025 --max-fit-samples 100000
+      - name: Commit only newly created private ablation summary and metrics
+        if: ${{ success() && steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/unsupervised_historical_2010_vs_2015/
+          if git diff --cached --quiet; then
+            echo 'HISTORIC_ML_RESULT_UNCHANGED=true'
+          else
+            git commit -m 'Save private controlled 2010-vs-2015 unsupervised training history study' >/dev/null
+            git fetch origin main >/tmp/krx_comparison_fetch.log 2>&1
+            if ! git rebase origin/main >/tmp/krx_comparison_rebase.log 2>&1; then
+              git rebase --abort >/dev/null 2>&1 || true
+              echo '::error::HISTORIC_TRAINING_RESULT_REBASE_CONFLICT'
+              exit 1
+            fi
+            if ! git push origin HEAD:main >/tmp/krx_comparison_push.log 2>&1; then
+              echo '::error::HISTORIC_TRAINING_RESULT_PUSH_FAILED'
+              exit 1
+            fi
+            echo 'HISTORIC_TRAINING_RESULT_PRIVATE_SAVED=true'
+          fi
+
+# Until 2010..2014 as-of historical archive is complete, only the readiness
+# check runs; no analysis outputs are created and no existing ML model altered.
