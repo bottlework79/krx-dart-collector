@@ -1,0 +1,97 @@
+name: KRX ML - LightGBM Trend Reversal and Continuation
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_recheck:
+        description: '검증 결과가 있어도 다시 학습/비교 실행'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - '.github/workflows/krx_lightgbm_trend_phases.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-ml-lightgbm-trend-phases-v1
+  cancel-in-progress: false
+
+jobs:
+  lightgbm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    steps:
+      - name: Checkout private KRX OHLCV and ML sources
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install ML libraries
+        run: |
+          python -m pip install pandas numpy scikit-learn lightgbm joblib requests finance-datareader
+      - name: Test leakage, 60-session risk-aware target, causal features and matched first-event rank
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m unittest \
+            validation.ml.test_lightgbm_trend_phases \
+            validation.ml.test_trend \
+            validation.ml.test_historical_event_priority \
+            validation.ml.test_historical_signal_events -v
+      - name: Verify 2015-2026 price files and avoid repeat study
+        id: ready
+        working-directory: private
+        env:
+          FORCE: ${{ inputs.force_recheck }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          files=[Path(f"data/market_{y}.pkl.gz") for y in range(2015,2027)]
+          absent=[str(p) for p in files if not p.exists()]
+          if absent:
+              raise SystemExit(f"LGBM_MARKET_PARTITIONS_MISSING={absent}")
+          output=Path("data/ml/lightgbm_trend_phases_v1/summary.json")
+          ready=not output.exists() or os.getenv("FORCE")=="true"
+          print("LGBM_TREND_READY",{"files":len(files),"existing":output.exists(),"run":ready},flush=True)
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as f:
+              f.write(f"run={'true' if ready else 'false'}\n")
+          PY
+      - name: Full 2022-2025 expanding 60-session-purged LightGBM vs HistGradientBoosting validation
+        if: ${{ steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.lightgbm_trend_phases --start-year 2015 --end-year 2026 --max-fit-samples 150000 --stride 10
+      - name: Save only new supervised research reports and current model privately
+        if: ${{ success() && steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/lightgbm_trend_phases_v1/
+          if git diff --cached --quiet; then
+            echo LGBM_TREND_RESULT_UNCHANGED=true
+          else
+            git commit -m 'Save private purged supervised LightGBM trend-phase comparative study' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::LGBM_TREND_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo LGBM_TREND_PRIVATE_SAVED=true
+          fi
+# Research-only output directory. Existing models and collector workflows untouched.
