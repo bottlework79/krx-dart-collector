@@ -1,0 +1,100 @@
+name: KRX ML - Unsupervised Temporal HMM V1
+
+on:
+  workflow_dispatch:
+    inputs:
+      validation_years:
+        description: '검증 연도 공백 구분 (첫 실행은 2025 권장)'
+        required: true
+        type: string
+        default: '2025'
+      stride:
+        description: '관측 간격(거래일), 학습/평가 일치'
+        required: true
+        type: number
+        default: 5
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-ml-unsupervised-temporal-hmm-v1
+  cancel-in-progress: false
+
+jobs:
+  temporal-hmm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    steps:
+      - name: Checkout private KRX data and research sources
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies for UNLABELED sequence model
+        run: python -m pip install numpy pandas scikit-learn joblib
+      - name: Unit tests - hidden temporal transitions and causal inference
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m unittest \
+            validation.ml.test_unsupervised_temporal_hmm \
+            validation.ml.test_unsupervised_regimes -v
+      - name: Confirm annual OHLCV partitions
+        working-directory: private
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          missing=[str(Path('data')/f'market_{year}.pkl.gz')
+                   for year in range(2015,2027)
+                   if not (Path('data')/f'market_{year}.pkl.gz').exists()]
+          if missing:
+              raise SystemExit(f'MISSING_MARKET_FILES={missing}')
+          print('TEMPORAL_HMM_SOURCE_PARTITIONS=12',flush=True)
+          PY
+      - name: Discover sequential hidden regimes without future labels
+        working-directory: private
+        env:
+          YEARS: ${{ inputs.validation_years }}
+          STRIDE: ${{ inputs.stride }}
+        run: |
+          set -euo pipefail
+          read -r -a FOLD_YEARS <<< "$YEARS"
+          if (( ${#FOLD_YEARS[@]} == 0 )); then
+            echo '::error::At least one validation year required'
+            exit 1
+          fi
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.unsupervised_temporal_hmm \
+            --start-year 2015 --end-year 2026 \
+            --validation-years "${FOLD_YEARS[@]}" \
+            --stride "$STRIDE" \
+            --output-dir data/ml/unsupervised_temporal_hmm_v1
+      - name: Save research-only reports in private GitHub repository
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/unsupervised_temporal_hmm_v1/
+          if git diff --cached --quiet; then
+            echo TEMPORAL_HMM_REPORT_UNCHANGED=true
+          else
+            git commit -m 'Save private unsupervised sequential HMM research' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::TEMPORAL_HMM_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo TEMPORAL_HMM_PRIVATE_SAVED=true
+          fi
+# Does not train on targets, or modify historical market files/other ML models.
