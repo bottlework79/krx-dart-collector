@@ -1,0 +1,94 @@
+name: KRX ML - 60 Session Future Peak and Drawdown Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_recheck:
+        description: '기존 peak audit 결과가 있어도 다시 검증'
+        required: false
+        type: boolean
+        default: false
+  push:
+    paths:
+      - '.github/workflows/krx_history_peak_audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-ml-historical-peak-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    steps:
+      - name: Checkout private KRX price histories and ML source
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: true
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install numerical and price dependencies
+        run: |
+          python -m pip install pandas numpy scikit-learn joblib requests finance-datareader
+      - name: Test future-window boundaries, original 2010-vs-2015 invariants, and time-safe ML
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m unittest \
+            validation.ml.test_historical_peak_audit \
+            validation.ml.test_historical_training_comparison \
+            validation.ml.test_unsupervised_regimes -v
+      - name: Require finished 2010-2014 history and avoid redundant reruns
+        id: ready
+        working-directory: private
+        env:
+          FORCE: ${{ inputs.force_recheck }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from collectors.price.historical_backfill import read_manifest, status
+          state=status(read_manifest(Path("data/historical_krx_2010_2014/manifest.json")), "data")
+          out=Path("data/ml/unsupervised_historical_2010_vs_2015/peak_audit_summary.json")
+          ready=state["complete"] and (not out.exists() or os.environ.get("FORCE")=="true")
+          print("HISTORIC_PEAK_AUDIT_READY=", {"complete":state["complete"], "checked":state["checked"], "run":ready}, flush=True)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fd:
+              fd.write(f"run={'true' if ready else 'false'}\n")
+          PY
+      - name: Measure future close +10 and intraday high +10 within 60 sessions
+        if: ${{ steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        run: |
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.historical_peak_audit --max-fit-samples 100000
+      - name: Save only new peak-audit results privately
+        if: ${{ success() && steps.ready.outputs.run == 'true' }}
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/unsupervised_historical_2010_vs_2015/peak_audit_summary.json data/ml/unsupervised_historical_2010_vs_2015/peak_audit_per_year.csv
+          if git diff --cached --quiet; then
+            echo HISTORIC_PEAK_AUDIT_UNCHANGED=true
+          else
+            git commit -m 'Save private 60-session in-window peak and downside ML audit' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::HISTORIC_PEAK_AUDIT_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo HISTORIC_PEAK_AUDIT_SAVED=true
+          fi
+# No model weights or existing 2010-vs-2015 summary are overwritten.
