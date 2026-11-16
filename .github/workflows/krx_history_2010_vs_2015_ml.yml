@@ -111,5 +111,6 @@ jobs:
             echo 'HISTORIC_TRAINING_RESULT_PRIVATE_SAVED=true'
           fi
 
+# 2010-2014 archive verified complete (1303/1303 weekdays): launch real comparison now.
 # Until 2010..2014 as-of historical archive is complete, only the readiness
 # check runs; no analysis outputs are created and no existing ML model altered.
