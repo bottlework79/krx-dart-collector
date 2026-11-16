@@ -143,15 +143,33 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          push_with_retry() {
+            local attempt=1
+            while (( attempt <= 12 )); do
+              git fetch origin main
+              if ! git rebase origin/main; then
+                git rebase --abort || true
+                echo "::error::DART changes conflict with concurrent main changes; refusing to overwrite"
+                return 1
+              fi
+              if git push origin HEAD:main; then
+                echo "STAGE1_PRIVATE_PUSH_OK attempt=$attempt"
+                return 0
+              fi
+              echo "::warning::Private main moved during DART push (attempt $attempt/12)"
+              sleep $((attempt * 2))
+              ((attempt += 1))
+            done
+            echo "::error::DART push exhausted safe retries"
+            return 1
+          }
           git add -- data/financial_statements/ data/unavailable_periods.json
           if [[ -f data/dart_corp_codes.json.gz ]]; then
             git add -- data/dart_corp_codes.json.gz
           fi
           if ! git diff --cached --quiet; then
             git commit -m "Update DART source data for $YEAR $REPORT (run $GITHUB_RUN_ID)"
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            push_with_retry
             echo "STAGE1_PERIOD_DB_PUSHED year=$YEAR report=$REPORT"
           fi
           if [[ -f "$RUNNER_TEMP/stage1_period_results.json" ]]; then
@@ -163,9 +181,7 @@ jobs:
             git add -- data/processing_history/runs.jsonl
             if ! git diff --cached --quiet; then
               git commit -m "Record DART stock/year/report outcomes (run $GITHUB_RUN_ID)"
-              git fetch origin main
-              git rebase origin/main
-              git push origin HEAD:main
+              push_with_retry
             fi
           else
             echo "::error::No collector result file; no stock may be marked complete"
