@@ -46,6 +46,7 @@ jobs:
           OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
           python -m unittest \
             validation.ml.test_unsupervised_temporal_hmm \
+            validation.ml.test_unsupervised_temporal_audit \
             validation.ml.test_unsupervised_regimes -v
       - name: Confirm annual OHLCV partitions
         working-directory: private
@@ -77,6 +78,18 @@ jobs:
             --validation-years "${FOLD_YEARS[@]}" \
             --stride "$STRIDE" \
             --output-dir data/ml/unsupervised_temporal_hmm_v1
+      - name: Ex-post historical trough timing audit (NEVER used for model fit)
+        working-directory: private
+        env:
+          YEARS: ${{ inputs.validation_years }}
+        run: |
+          set -euo pipefail
+          read -r -a FOLD_YEARS <<< "$YEARS"
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.unsupervised_temporal_audit \
+            --start-year 2015 --end-year 2026 \
+            --years "${FOLD_YEARS[@]}" \
+            --folder data/ml/unsupervised_temporal_hmm_v1
       - name: Save research-only reports in private GitHub repository
         working-directory: private
         run: |
