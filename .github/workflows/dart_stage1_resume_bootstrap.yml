@@ -1,0 +1,26 @@
+name: Resume DART Stage 1 from 2017 annual (one-time bootstrap)
+
+on:
+  push:
+    paths:
+      - .github/workflows/dart_stage1_resume_bootstrap.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    if: ${{ contains(github.event.head_commit.message, '[DART_STAGE1_RESUME_2017]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch checkpoint-based Stage 1 continuation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f stock_code= -f year=2017 -f report=annual \
+            -f max_stocks= -f force_refresh=false -f continue_periods=true
+          echo "STAGE1_RESUME_DISPATCHED year=2017 report=annual continue_periods=true"
