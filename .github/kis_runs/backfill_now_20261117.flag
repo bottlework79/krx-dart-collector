@@ -12,3 +12,9 @@ max_codes=500
 
 manual_followup=2026-11-17T08:30Z
 reason=run_next_500_now_without_waiting_for_cron
+
+chain_bootstrap=2026-11-17T08:32Z
+mode=backfill_auto
+first_run_codes=1
+following_runs_codes=500
+safety=only_after_successful_quality_and_private_checkpoint
