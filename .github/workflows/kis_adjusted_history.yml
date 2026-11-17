@@ -1,41 +1,49 @@
-name: KIS Adjusted KRX Historical Backfill - isolated private staging
+name: KIS Adjusted OHLCV - historical, daily monitor and encrypted token reuse
 
 on:
   workflow_dispatch:
     inputs:
       mode:
         type: choice
-        options: [pilot, batch, stats]
-        default: pilot
+        options: [batch, monitor, refresh, stats]
+        default: stats
         required: true
-        description: "pilot: verified 2010 stocks, batch: next codes in specified KRX year, stats: offline status"
+        description: "batch: next KRX codes; monitor: staged daily prices; refresh: selected historical codes; stats: no API"
       year:
         type: number
-        default: 2010
+        default: 2026
         required: true
-        description: "2010 to 2026"
+        description: "2010 through present"
       max_codes:
         type: number
         default: 20
         required: true
-        description: "maximum stock codes processed this invocation, <= 100"
+        description: "batch/monitor max code count"
+      codes:
+        type: string
+        default: ''
+        required: false
+        description: "Optional comma-separated six-digit codes; required for refresh"
+  schedule:
+    # KRX whole-market price refresh 16:30 KST; KIS starts 18:30 KST.
+    - cron: '30 9 * * 1-5'
   push:
     paths:
-      - '.github/kis_runs/start_kis_backfill_pilot_20261117.flag'
+      - '.github/workflows/kis_adjusted_history.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: kis-adjusted-krx-history-single-writer
+  group: kis-auth-single-writer
   cancel-in-progress: false
 
 jobs:
-  adjusted-historical:
+  kis-adjusted:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - name: Checkout PRIVATE KRX and KIS source and archives
+      - name: Checkout private KRX reference and KIS code
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
@@ -46,91 +54,129 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install isolated adjusted-price dependencies
-        run: python -m pip install pandas numpy requests
-      - name: Test KIS historical backfill with synthetic as-of-date shares
+      - name: Install read-only data dependencies
+        run: python -m pip install pandas numpy requests cryptography
+      - name: Run KIS offline unit and token security regressions
         working-directory: private
         run: |
           set -euo pipefail
-          python -m unittest validation.prices.test_kis_adjusted_backfill -v
-      - name: Read KIS adjusted daily prices for chosen year (NO orders)
+          python -m unittest \
+            validation.prices.test_kis_client \
+            validation.prices.test_kis_adjusted_backfill \
+            validation.prices.test_kis_adjusted_sync -v
+      - name: Execute requested KIS action, no order endpoints
+        if: github.event_name != 'push'
         working-directory: private
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
-          MODE: ${{ inputs.mode }}
-          YEAR: ${{ inputs.year }}
-          MAX_CODES: ${{ inputs.max_codes }}
         run: |
           set -euo pipefail
           mode="${{ inputs.mode }}"
           year="${{ inputs.year }}"
           count="${{ inputs.max_codes }}"
-          if [ -z "$mode" ]; then mode=pilot; fi
-          if [ -z "$year" ]; then year=2010; fi
+          codes="${{ inputs.codes }}"
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            mode=daily
+            year=$(date -u +%Y)
+            count=20
+          fi
+          if [ -z "$mode" ]; then mode=stats; fi
+          if [ -z "$year" ]; then year=$(date -u +%Y); fi
           if [ -z "$count" ]; then count=20; fi
-          if ! [[ "$year" =~ ^20(1[0-9]|2[0-6])$ ]]; then
-            echo '::error::Year must be 2010-2026'
+          if ! [[ "$year" =~ ^20[0-9]{2}$ ]] || (( year < 2010 || year > $(date -u +%Y) )); then
+            echo "::error::Invalid KIS year"
             exit 1
           fi
-          if ! [[ "$count" =~ ^[0-9]+$ ]] || (( count < 1 || count > 100 )); then
-            echo '::error::max_codes must be 1-100'
+          if ! [[ "$count" =~ ^[0-9]+$ ]] || (( count < 1 || count > 5000 )); then
+            echo "::error::max_codes must be 1..5000"
             exit 1
           fi
-          if [ "$mode" = "pilot" ]; then
-            # These five stock codes were independently checked by KIS for Jan-Apr 2010
-            # and span now-listed and former-listed names.
-            python -m collectors.price.kis_adjusted_backfill \
-              --year 2010 \
-              --codes "005930,000060,000360,000420,950030" \
-              --max-codes 5
-          elif [ "$mode" = "batch" ]; then
-            python -m collectors.price.kis_adjusted_backfill \
-              --year "$year" --max-codes "$count"
-          elif [ "$mode" = "stats" ]; then
+          if [ -n "$codes" ] && ! [[ "$codes" =~ ^[0-9]{6}(,[0-9]{6})*$ ]]; then
+            echo "::error::codes must be comma-separated six-digit values"
+            exit 1
+          fi
+          echo "KIS_COLLECTION_MODE=$mode year=$year"
+          if [ "$mode" = "stats" ]; then
             python -m collectors.price.kis_adjusted_backfill \
               --year "$year" --stats-only
+          elif [ "$mode" = "batch" ]; then
+            if [ -n "$codes" ]; then
+              python -m collectors.price.kis_adjusted_backfill \
+                --year "$year" --max-codes "$count" --codes "$codes"
+            else
+              python -m collectors.price.kis_adjusted_backfill \
+                --year "$year" --max-codes "$count"
+            fi
+          elif [ "$mode" = "monitor" ]; then
+            if [ -n "$codes" ]; then
+              python -m collectors.price.kis_adjusted_sync \
+                --year "$year" --max-codes "$count" --codes "$codes"
+            else
+              python -m collectors.price.kis_adjusted_sync \
+                --year "$year" --max-codes "$count"
+            fi
+          elif [ "$mode" = "refresh" ]; then
+            if [ -z "$codes" ]; then
+              echo "::error::refresh requires explicit six-digit codes"
+              exit 1
+            fi
+            python -m collectors.price.kis_adjusted_backfill \
+              --year "$year" --max-codes "$count" \
+              --codes "$codes" --force-refresh
+          elif [ "$mode" = "daily" ]; then
+            # Bootstrap a bounded KIS batch then monitor staged names.
+            # The KRX daily job remains independent and authoritative.
+            python -m collectors.price.kis_adjusted_backfill \
+              --year "$year" --max-codes "$count"
+            python -m collectors.price.kis_adjusted_sync \
+              --year "$year" --max-codes 5000
           else
-            echo '::error::mode must be pilot/batch/stats'
+            echo "::error::Unknown collection mode"
             exit 1
           fi
-      - name: Persist modified KIS-only staged shards and manifest in PRIVATE repo
+      - name: Persist encrypted token and adjusted staging to PRIVATE repository
         if: always()
         working-directory: private
         run: |
           set -euo pipefail
-          if [ ! -d data/adjusted_kis/shards ]; then
-            echo KIS_ADJUSTED_NO_SHARDS_WRITTEN=true
-            exit 0
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -f -- data/adjusted_kis/shards/ data/adjusted_kis/manifests/
+          for item in \
+            data/adjusted_kis/auth/token.enc.json \
+            data/adjusted_kis/shards \
+            data/adjusted_kis/manifests \
+            data/adjusted_kis/corporate_action_refresh_queue.json; do
+            if [ -e "$item" ]; then git add -f -- "$item"; fi
+          done
+          for item in data/adjusted_kis/monitor_cursor_*.json; do
+            if [ -f "$item" ]; then git add -f -- "$item"; fi
+          done
           if git diff --cached --quiet; then
-            echo KIS_ADJUSTED_NO_NEW_CHECKPOINT=true
+            echo KIS_NO_PRIVATE_CHECKPOINT_CHANGES=true
             exit 0
           fi
           python - <<'PY'
           from pathlib import Path
-          for p in Path("data/adjusted_kis/shards").glob("*.pkl.gz"):
-              if p.stat().st_size > 95*1024*1024:
-                  raise SystemExit("KIS stage shard exceeds 95 MiB: " + p.name)
+          for path in Path('data/adjusted_kis/shards').glob('*.pkl.gz'):
+              if path.stat().st_size > 95 * 1024 * 1024:
+                  raise SystemExit('KIS yearly shard exceeds 95MiB: '+path.name)
           PY
-          git commit -m 'Save separate KIS adjusted year shard and as-of-coverage manifest'
-          for try in 1 2 3 4 5 6 7 8; do
+          git commit -m 'Checkpoint KIS adjusted prices, monitor and encrypted token'
+          for attempt in 1 2 3 4 5 6 7 8; do
             git fetch origin main
             if ! git rebase origin/main; then
               git rebase --abort || true
-              echo '::error::Concurrent KIS staging update conflicted'
+              echo "::error::KIS checkpoint conflict, no force push"
               exit 1
             fi
             if git push origin HEAD:main; then
-              echo KIS_ADJUSTED_PRIVATE_CHECKPOINT_SAVED=true
+              echo KIS_STAGING_AND_ENCRYPTED_AUTH_SAVED_PRIVATE=true
               exit 0
             fi
             sleep 5
           done
-          echo '::error::Unable to save private adjusted KIS checkpoint'
+          echo "::error::KIS private checkpoint push failed"
           exit 1
-# Never modify the original production KRX market_YYYY.pkl.gz files.
-# Never make a trading order. Actual ML data selection stays unchanged.
+
+# No credentials or prices are published. Current KRX and ML DBs untouched.
