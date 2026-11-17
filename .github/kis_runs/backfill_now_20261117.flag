@@ -6,3 +6,6 @@ source=KRX-asof
 prices=KIS-adjusted-only
 private_commit=true
 readonly=true
+
+acceleration=2026-11-17 500-stock historical batch after 30-test green run
+max_codes=500
