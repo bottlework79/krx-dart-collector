@@ -16,9 +16,9 @@ on:
         description: "2010 through present"
       max_codes:
         type: number
-        default: 20
+        default: 500
         required: true
-        description: "batch/monitor max code count"
+        description: "historical batch max 500; monitor stock count"
       codes:
         type: string
         default: ''
@@ -29,7 +29,7 @@ on:
     # suspended until the historical backfill/coverage gate is complete.
     # Restore: - cron: '30 9 * * 1-5'
     # Historical KIS backfill continues, 09:15-21:15 KST Mon-Sat.
-    # Limited to 60 codes/attempt with conservative API pacing.
+    # Bounded at 500 codes/attempt, 0.65s per KIS quote request.
     - cron: '15 0-12 * * 1-6'
   push:
     paths:
@@ -86,13 +86,13 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             mode=backfill_auto
             year=2010
-            count=150
+            count=500
           fi
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
             if [ "${{ github.event.schedule }}" = "15 0-12 * * 1-6" ]; then
               mode=backfill_auto
               year=2010
-              count=60
+              count=500
             else
               mode=daily
               year=$(date -u +%Y)
