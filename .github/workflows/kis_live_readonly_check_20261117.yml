@@ -153,11 +153,24 @@ jobs:
               "private_data_modified":False,
             },ensure_ascii=False),flush=True)
           except Exception as error:
-            # Optional experimental dataset, not required for OHLCV pipeline.
+            # Optional dataset only. Report safe schema/count diagnostics,
+            # never full API bodies or authorization context.
+            sample_rows=rows if "rows" in locals() and isinstance(rows,list) else []
+            expected=("stck_bsop_date","prsn_ntby_qty","frgn_ntby_qty",
+                      "orgn_ntby_qty")
+            missing={f:sum(not r.get(f) for r in sample_rows)
+                     for f in expected}
+            keys=sorted(set().union(*(r.keys() for r in sample_rows[:3]))
+                        ) if sample_rows else []
             print("KIS_INVESTOR_LIVE_UNVERIFIED="+json.dumps({
               "error_type":type(error).__name__,
               "error_description":str(error)[:160],
               "price_collector_affected":False,
+              "rows":len(sample_rows),
+              "returned_columns":keys,
+              "missing_value_counts":missing,
+              "nonempty_investor_rows":sum(all(r.get(f) for f in expected)
+                                            for r in sample_rows)
             },ensure_ascii=False),flush=True)
           PY
       - name: Commit encrypted token checkpoint privately even if quote fails
