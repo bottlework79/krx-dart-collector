@@ -1,8 +1,0 @@
-operation=production_workflow_live_pilot
-mode=backfill_auto
-years=2010-2026
-pilot_max_codes=12
-preserve_krx=true
-save_adjusted_private_only=true
-no_order_endpoints=true
-second_batch=verify_5_symbol_checkpoint_and_event_anchor_quality
