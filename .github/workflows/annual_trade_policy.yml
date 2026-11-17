@@ -1,0 +1,112 @@
+name: KRX ML - Annual Unlabeled Buy Hold Sell Policy
+
+on:
+  workflow_dispatch:
+    inputs:
+      eval_year:
+        description: '검증 연도: 이전 2개 연도까지 무정답 패턴학습, 직전 연도 수익학습, 입력 연도 검증'
+        type: number
+        required: true
+        default: 2025
+      fee_per_side:
+        description: '매수/매도 편도 비용 추정치 (0.0025=0.25%)'
+        type: string
+        required: true
+        default: '0.0025'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: krx-annual-unlabeled-learned-trade-policy
+  cancel-in-progress: false
+
+jobs:
+  yearly-trade-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout private code and market archives (GitHub main)
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install research dependencies
+        run: python -m pip install numpy pandas scikit-learn joblib
+
+      - name: Run next-open timing, year boundary and synthetic integration tests
+        working-directory: private
+        run: |
+          set -euo pipefail
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+            python -m unittest validation.ml.test_annual_trade_policy -v
+
+      - name: Verify required historical annual price files
+        working-directory: private
+        env:
+          EVAL_YEAR: ${{ inputs.eval_year }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          year = int(os.environ['EVAL_YEAR'])
+          if year < 2015 or year > 2026:
+              raise SystemExit(f'eval_year outside supported interval: {year}')
+          missing=[]
+          for yr in range(2010, year+1):
+              directory = Path('data/historical_krx_2010_2014') if yr < 2015 else Path('data')
+              file = directory / f'market_{yr}.pkl.gz'
+              if not file.is_file():
+                  missing.append(str(file))
+          if missing:
+              raise SystemExit(f'ANNUAL_ML_MISSING_PRICE_ARCHIVES={missing}')
+          print(f'ANNUAL_ML_PRICE_ARCHIVES_OK={year-2009}', flush=True)
+          PY
+
+      - name: Learn daily latent patterns and buy/hold/sell policy; assess new year
+        working-directory: private
+        env:
+          EVAL_YEAR: ${{ inputs.eval_year }}
+          FEE_PER_SIDE: ${{ inputs.fee_per_side }}
+        run: |
+          set -euo pipefail
+          OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
+          python -m analysis.ml.annual_trade_policy \
+            --eval-year "$EVAL_YEAR" \
+            --data-dir data \
+            --historical-dir data/historical_krx_2010_2014 \
+            --output-dir data/ml/annual_trade_policy_v1 \
+            --fee-per-side "$FEE_PER_SIDE"
+
+      - name: Save only new annual research model and evaluation outputs
+        working-directory: private
+        env:
+          EVAL_YEAR: ${{ inputs.eval_year }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "data/ml/annual_trade_policy_v1/$EVAL_YEAR/"
+          if git diff --cached --quiet; then
+            echo ANNUAL_TRADE_POLICY_NO_CHANGE=true
+            exit 0
+          fi
+          git commit -m "Save annual unlabeled fitted-Bellman policy research for $EVAL_YEAR"
+          git fetch origin main
+          if ! git rebase origin/main; then
+            git rebase --abort || true
+            echo '::error::ANNUAL_TRADE_POLICY_REBASE_FAILED'
+            exit 1
+          fi
+          git push origin HEAD:main
+          echo ANNUAL_TRADE_POLICY_PRIVATE_ARTIFACTS_SAVED=true
+# Manual only. Existing KRX price/DART collectors and ML research untouched.
