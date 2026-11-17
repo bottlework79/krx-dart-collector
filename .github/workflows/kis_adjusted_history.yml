@@ -5,10 +5,10 @@ on:
     inputs:
       mode:
         type: choice
-        options: [batch, monitor, refresh, investor, stats]
+        options: [batch, monitor, refresh, investor, stats, backfill_auto, quality]
         default: stats
         required: true
-        description: "batch: adjusted prices; monitor: adjustment changes; refresh: selected historical codes; investor: recent net-buy; stats: no API"
+        description: "batch: single-year; backfill_auto: 2010-2026 resume; quality: offline data audit; monitor/refresh/investor/stats"
       year:
         type: number
         default: 2026
@@ -25,11 +25,15 @@ on:
         required: false
         description: "Optional comma-separated six-digit codes; required for refresh"
   schedule:
-    # KRX whole-market price refresh 16:30 KST; KIS starts 18:30 KST.
+    # KRX whole-market price refresh 16:30 KST; KIS daily at 18:30 KST.
     - cron: '30 9 * * 1-5'
+    # 2010-2026 historical catchup, 09:15-21:15 KST Mon-Sat.
+    # Limited to 60 codes/attempt with conservative API pacing.
+    - cron: '15 0-12 * * 1-6'
   push:
     paths:
       - '.github/workflows/kis_adjusted_history.yml'
+      - '.github/kis_runs/operate_kis_first_batch_20261117.flag'
 
 permissions:
   contents: read
@@ -64,9 +68,10 @@ jobs:
             validation.prices.test_kis_client \
             validation.prices.test_kis_adjusted_backfill \
             validation.prices.test_kis_adjusted_sync \
-            validation.prices.test_kis_investor_flow -v
+            validation.prices.test_kis_investor_flow \
+            validation.prices.test_kis_quality_scheduler -v
       - name: Execute requested KIS action, no order endpoints
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, 'RUN_KIS_OPERATIONAL_PILOT_20261117')
         working-directory: private
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
@@ -78,9 +83,20 @@ jobs:
           count="${{ inputs.max_codes }}"
           codes="${{ inputs.codes }}"
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
-            mode=daily
-            year=$(date -u +%Y)
-            count=20
+            if [ "${{ github.event.schedule }}" = "15 0-12 * * 1-6" ]; then
+              mode=backfill_auto
+              year=2010
+              count=60
+            else
+              mode=daily
+              year=$(date -u +%Y)
+              count=20
+            fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            mode=backfill_auto
+            year=2010
+            count=12
           fi
           if [ -z "$mode" ]; then mode=stats; fi
           if [ -z "$year" ]; then year=$(date -u +%Y); fi
@@ -98,7 +114,12 @@ jobs:
             exit 1
           fi
           echo "KIS_COLLECTION_MODE=$mode year=$year"
-          if [ "$mode" = "stats" ]; then
+          if [ "$mode" = "backfill_auto" ]; then
+            python -m collectors.price.kis_backfill_scheduler \
+              --max-codes "$count" --sleep-seconds 0.65
+          elif [ "$mode" = "quality" ]; then
+            python -m collectors.price.kis_quality
+          elif [ "$mode" = "stats" ]; then
             python -m collectors.price.kis_adjusted_backfill \
               --year "$year" --stats-only
           elif [ "$mode" = "batch" ]; then
@@ -145,6 +166,13 @@ jobs:
             echo "::error::Unknown collection mode"
             exit 1
           fi
+      - name: Validate staged 2010-2026 KIS coverage and data integrity
+        if: always()
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m collectors.price.kis_quality
+
       - name: Persist encrypted token and adjusted staging to PRIVATE repository
         if: always()
         working-directory: private
@@ -156,6 +184,7 @@ jobs:
             data/adjusted_kis/auth/token.enc.json \
             data/adjusted_kis/shards \
             data/adjusted_kis/manifests \
+            data/adjusted_kis/reports \
             data/adjusted_kis/corporate_action_refresh_queue.json \
             data/kis_investor_flow/shards \
             data/kis_investor_flow/manifests; do
