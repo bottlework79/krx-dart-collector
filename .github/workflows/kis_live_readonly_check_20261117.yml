@@ -91,6 +91,75 @@ jobs:
              "orders_submitted":False,
           },ensure_ascii=False),flush=True)
           PY
+      - name: Live 2026 KIS daily monitor with an isolated temporary stage
+        working-directory: private
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import shutil
+          import tempfile
+          from pathlib import Path
+          from collectors.price.kis_adjusted_sync import monitor
+
+          source = Path("data/adjusted_kis")
+          with tempfile.TemporaryDirectory() as d:
+            tmp=Path(d)/"adjusted_kis"
+            for folder in ("shards", "manifests"):
+              (tmp/folder).mkdir(parents=True,exist_ok=True)
+              filename=("market_2026.pkl.gz" if folder=="shards"
+                        else "market_2026.json")
+              shutil.copy2(source/folder/filename,tmp/folder/filename)
+            outcome=monitor(year=2026,selected_codes=["002070"],
+                            data_dir="data",root=tmp,
+                            sleep_secs=0.0)
+            if outcome["monitored"]!=1:
+              raise RuntimeError("KIS staged 2026 monitor did not check 002070")
+            if outcome["queued_rebases"]!=0:
+              raise RuntimeError("KIS monitor left an unresolved adjustment rebase")
+            print("KIS_LIVE_DAILY_MONITOR_VERIFIED="+json.dumps(
+              outcome,ensure_ascii=False),flush=True)
+          PY
+      - name: Probe optional KIS investor-flow endpoint without mutating data
+        working-directory: private
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import requests
+          from collectors.price.kis_client import get_token,require
+          from collectors.price.kis_investor_flow import query_investor, normalize_investor
+          s=requests.Session()
+          key,secret=require("KIS_APP_KEY"),require("KIS_APP_SECRET")
+          token=get_token(s,key,secret,log_reuse=True)
+          try:
+            rows=query_investor(s,key,secret,token,"005930")
+            if not rows:
+              raise RuntimeError("KIS investor API returned no rows")
+            parsed=normalize_investor("005930",rows)
+            if parsed.empty:
+              raise RuntimeError("KIS investor rows could not be normalized")
+            print("KIS_INVESTOR_LIVE_VERIFIED="+json.dumps({
+              "code":"005930","rows":len(parsed),
+              "first":str(parsed.Date.min().date()),
+              "last":str(parsed.Date.max().date()),
+              "columns":list(parsed.columns),
+              "private_data_modified":False,
+            },ensure_ascii=False),flush=True)
+          except Exception as error:
+            # Optional experimental dataset, not required for OHLCV pipeline.
+            print("KIS_INVESTOR_LIVE_UNVERIFIED="+json.dumps({
+              "error_type":type(error).__name__,
+              "error_description":str(error)[:160],
+              "price_collector_affected":False,
+            },ensure_ascii=False),flush=True)
+          PY
       - name: Commit encrypted token checkpoint privately even if quote fails
         if: always()
         working-directory: private
