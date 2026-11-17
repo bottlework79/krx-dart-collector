@@ -24,20 +24,16 @@ on:
         default: ''
         required: false
         description: "Optional comma-separated six-digit codes; required for refresh"
-  schedule:
-    # PAUSED 2026-11-17: ordinary KIS 18:30 KST daily price sync is
-    # suspended until the historical backfill/coverage gate is complete.
-    # Restore: - cron: '30 9 * * 1-5'
-    # Historical KIS backfill continues, 09:15-21:15 KST Mon-Sat.
-    # Bounded at 500 codes/attempt, 0.65s per KIS quote request.
-    - cron: '15 0-12 * * 1-6'
+  # KRX/KIS ordinary daily schedules remain paused for history backfill.
+  # Historical batches now chain by workflow_dispatch after verified success.
+  # No cron: prevents simultaneous queued/scheduled runs and empty hourly waits.
   push:
     paths:
-      - '.github/workflows/kis_adjusted_history.yml'
       - '.github/kis_runs/backfill_now_20261117.flag'
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: kis-auth-single-writer
@@ -72,6 +68,7 @@ jobs:
             validation.prices.test_kis_investor_flow \
             validation.prices.test_kis_quality_scheduler -v
       - name: Execute requested KIS action, no order endpoints
+        id: collect
         if: github.event_name != 'push' || contains(github.event.head_commit.message, 'RUN_KIS_BACKFILL_NOW_20261117')
         working-directory: private
         env:
@@ -86,7 +83,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             mode=backfill_auto
             year=2010
-            count=500
+            count=1  # One-symbol bootstrap verifies self-dispatch; next run uses 500.
           fi
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
             if [ "${{ github.event.schedule }}" = "15 0-12 * * 1-6" ]; then
@@ -115,6 +112,7 @@ jobs:
             exit 1
           fi
           echo "KIS_COLLECTION_MODE=$mode year=$year"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           if [ "$mode" = "backfill_auto" ]; then
             python -m collectors.price.kis_backfill_scheduler \
               --max-codes "$count" --sleep-seconds 0.65
@@ -220,5 +218,50 @@ jobs:
           done
           echo "::error::KIS private checkpoint push failed"
           exit 1
+
+      - name: Check remaining KIS 2010-2026 work after private checkpoint
+        id: next_backfill
+        if: success() && steps.collect.outputs.mode == 'backfill_auto'
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from collectors.price.kis_backfill_scheduler import choose_next
+          pending = choose_next()
+          more = pending.get("year") is not None
+          # A false result means no *eligible* work now; errors under
+          # 24-hour cooldown or partial/unavailable tickers still need audit.
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write("has_more=" + str(more).lower() + "\n")
+          print("KIS_CHAIN_NEXT_PLAN=" + json.dumps({
+              "has_more": more,
+              "next_year": pending.get("year"),
+              "selection_policy": pending["selection_policy"],
+              "unattempted_in_next_year": pending.get("remaining_unattempted", 0),
+              "ready_for_machine_learning": False,
+          }, ensure_ascii=False), flush=True)
+          PY
+
+      - name: Immediately dispatch next 500-symbol KIS batch
+        if: success() && github.run_attempt == 1 && steps.next_backfill.outputs.has_more == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub GITHUB_TOKEN actions:write may dispatch its own workflow.
+          # This happens only after successful quality + PRIVATE data commit.
+          gh workflow run kis_adjusted_history.yml --repo "$GITHUB_REPOSITORY" \
+            --ref main -f mode=backfill_auto -f year=2010 -f max_codes=500
+          echo "KIS_NEXT_BATCH_DISPATCH_ACCEPTED=true"
+
+      - name: No eligible KIS backfill remains
+        if: success() && steps.collect.outputs.mode == 'backfill_auto' && steps.next_backfill.outputs.has_more == 'false'
+        run: |
+          echo "KIS_BACKFILL_NO_ELIGIBLE_CODES=true"
+          echo "No eligible 2010-2026 code-year remains now. Verify partial/unavailable/error and 24h cooldown in private QA before calling the archive complete."
 
 # No credentials or prices are published. Current KRX and ML DBs untouched.
