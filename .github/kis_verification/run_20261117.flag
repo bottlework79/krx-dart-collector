@@ -4,3 +4,4 @@ no_orders=true
 preserve_krx=true
 second_run=verify_cached_token_reused_without_oauth_issuance
 third_run=live_price_monitor_in_temp_and_optional_investor_endpoint
+fourth_run=inspect_investor_schema_and_missing_counts_only
