@@ -1,0 +1,4 @@
+audit=annual_trade_policy_v1
+results=2015..2026
+compares=archived_ohlcv,next_open_prices,suspicious_returns,matched_entry_hold_5_20_60
+request=2026-11-17T02:29:56Z
