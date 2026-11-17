@@ -1,0 +1,4 @@
+mode=read_only_live_oauth_quote_validation
+code=002070
+no_orders=true
+preserve_krx=true
