@@ -1,0 +1,136 @@
+name: KIS Adjusted KRX Historical Backfill - isolated private staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [pilot, batch, stats]
+        default: pilot
+        required: true
+        description: "pilot: verified 2010 stocks, batch: next codes in specified KRX year, stats: offline status"
+      year:
+        type: number
+        default: 2010
+        required: true
+        description: "2010 to 2026"
+      max_codes:
+        type: number
+        default: 20
+        required: true
+        description: "maximum stock codes processed this invocation, <= 100"
+  push:
+    paths:
+      - '.github/kis_runs/start_kis_backfill_pilot_20261117.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kis-adjusted-krx-history-single-writer
+  cancel-in-progress: false
+
+jobs:
+  adjusted-historical:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout PRIVATE KRX and KIS source and archives
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated adjusted-price dependencies
+        run: python -m pip install pandas numpy requests
+      - name: Test KIS historical backfill with synthetic as-of-date shares
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.prices.test_kis_adjusted_backfill -v
+      - name: Read KIS adjusted daily prices for chosen year (NO orders)
+        working-directory: private
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          MODE: ${{ inputs.mode }}
+          YEAR: ${{ inputs.year }}
+          MAX_CODES: ${{ inputs.max_codes }}
+        run: |
+          set -euo pipefail
+          mode="${{ inputs.mode }}"
+          year="${{ inputs.year }}"
+          count="${{ inputs.max_codes }}"
+          if [ -z "$mode" ]; then mode=pilot; fi
+          if [ -z "$year" ]; then year=2010; fi
+          if [ -z "$count" ]; then count=20; fi
+          if ! [[ "$year" =~ ^20(1[0-9]|2[0-6])$ ]]; then
+            echo '::error::Year must be 2010-2026'
+            exit 1
+          fi
+          if ! [[ "$count" =~ ^[0-9]+$ ]] || (( count < 1 || count > 100 )); then
+            echo '::error::max_codes must be 1-100'
+            exit 1
+          fi
+          if [ "$mode" = "pilot" ]; then
+            # These five stock codes were independently checked by KIS for Jan-Apr 2010
+            # and span now-listed and former-listed names.
+            python -m collectors.price.kis_adjusted_backfill \
+              --year 2010 \
+              --codes "005930,000060,000360,000420,950030" \
+              --max-codes 5
+          elif [ "$mode" = "batch" ]; then
+            python -m collectors.price.kis_adjusted_backfill \
+              --year "$year" --max-codes "$count"
+          elif [ "$mode" = "stats" ]; then
+            python -m collectors.price.kis_adjusted_backfill \
+              --year "$year" --stats-only
+          else
+            echo '::error::mode must be pilot/batch/stats'
+            exit 1
+          fi
+      - name: Persist modified KIS-only staged shards and manifest in PRIVATE repo
+        if: always()
+        working-directory: private
+        run: |
+          set -euo pipefail
+          if [ ! -d data/adjusted_kis/shards ]; then
+            echo KIS_ADJUSTED_NO_SHARDS_WRITTEN=true
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f -- data/adjusted_kis/shards/ data/adjusted_kis/manifests/
+          if git diff --cached --quiet; then
+            echo KIS_ADJUSTED_NO_NEW_CHECKPOINT=true
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          for p in Path("data/adjusted_kis/shards").glob("*.pkl.gz"):
+              if p.stat().st_size > 95*1024*1024:
+                  raise SystemExit("KIS stage shard exceeds 95 MiB: " + p.name)
+          PY
+          git commit -m 'Save separate KIS adjusted year shard and as-of-coverage manifest'
+          for try in 1 2 3 4 5 6 7 8; do
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::Concurrent KIS staging update conflicted'
+              exit 1
+            fi
+            if git push origin HEAD:main; then
+              echo KIS_ADJUSTED_PRIVATE_CHECKPOINT_SAVED=true
+              exit 0
+            fi
+            sleep 5
+          done
+          echo '::error::Unable to save private adjusted KIS checkpoint'
+          exit 1
+# Never modify the original production KRX market_YYYY.pkl.gz files.
+# Never make a trading order. Actual ML data selection stays unchanged.
