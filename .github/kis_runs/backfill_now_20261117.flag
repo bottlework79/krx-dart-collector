@@ -1,0 +1,8 @@
+request=RUN_KIS_BACKFILL_NOW_20261117
+mode=backfill_auto
+start_year=2010
+max_new_codes=150
+source=KRX-asof
+prices=KIS-adjusted-only
+private_commit=true
+readonly=true
