@@ -5,10 +5,10 @@ on:
     inputs:
       mode:
         type: choice
-        options: [batch, monitor, refresh, stats]
+        options: [batch, monitor, refresh, investor, stats]
         default: stats
         required: true
-        description: "batch: next KRX codes; monitor: staged daily prices; refresh: selected historical codes; stats: no API"
+        description: "batch: adjusted prices; monitor: adjustment changes; refresh: selected historical codes; investor: recent net-buy; stats: no API"
       year:
         type: number
         default: 2026
@@ -63,7 +63,8 @@ jobs:
           python -m unittest \
             validation.prices.test_kis_client \
             validation.prices.test_kis_adjusted_backfill \
-            validation.prices.test_kis_adjusted_sync -v
+            validation.prices.test_kis_adjusted_sync \
+            validation.prices.test_kis_investor_flow -v
       - name: Execute requested KIS action, no order endpoints
         if: github.event_name != 'push'
         working-directory: private
@@ -124,6 +125,15 @@ jobs:
             python -m collectors.price.kis_adjusted_backfill \
               --year "$year" --max-codes "$count" \
               --codes "$codes" --force-refresh
+          elif [ "$mode" = "investor" ]; then
+            # KIS only returns a recent window; this cannot backfill 2010 data.
+            if [ -n "$codes" ]; then
+              python -m collectors.price.kis_investor_flow \
+                --year "$year" --max-codes "$count" --codes "$codes"
+            else
+              python -m collectors.price.kis_investor_flow \
+                --year "$year" --max-codes "$count"
+            fi
           elif [ "$mode" = "daily" ]; then
             # Bootstrap a bounded KIS batch then monitor staged names.
             # The KRX daily job remains independent and authoritative.
@@ -146,7 +156,9 @@ jobs:
             data/adjusted_kis/auth/token.enc.json \
             data/adjusted_kis/shards \
             data/adjusted_kis/manifests \
-            data/adjusted_kis/corporate_action_refresh_queue.json; do
+            data/adjusted_kis/corporate_action_refresh_queue.json \
+            data/kis_investor_flow/shards \
+            data/kis_investor_flow/manifests; do
             if [ -e "$item" ]; then git add -f -- "$item"; fi
           done
           for item in data/adjusted_kis/monitor_cursor_*.json; do
