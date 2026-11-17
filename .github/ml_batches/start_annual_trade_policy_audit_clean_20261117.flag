@@ -1,0 +1,5 @@
+audit=2015-2026
+normalization=diagnostic_only
+discontinuity=close_jump_over_50percent_or_trading_gap_over_10_calendar_days
+matched_same_entry_hold=5,20,60_sessions
+source_data_unchanged=true
