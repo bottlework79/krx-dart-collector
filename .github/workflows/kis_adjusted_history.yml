@@ -33,7 +33,6 @@ on:
   push:
     paths:
       - '.github/workflows/kis_adjusted_history.yml'
-      - '.github/kis_runs/operate_kis_first_batch_20261117.flag'
 
 permissions:
   contents: read
@@ -71,7 +70,7 @@ jobs:
             validation.prices.test_kis_investor_flow \
             validation.prices.test_kis_quality_scheduler -v
       - name: Execute requested KIS action, no order endpoints
-        if: github.event_name != 'push' || contains(github.event.head_commit.message, 'RUN_KIS_OPERATIONAL_PILOT_20261117')
+        if: github.event_name != 'push'
         working-directory: private
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
@@ -92,11 +91,6 @@ jobs:
               year=$(date -u +%Y)
               count=20
             fi
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            mode=backfill_auto
-            year=2010
-            count=12
           fi
           if [ -z "$mode" ]; then mode=stats; fi
           if [ -z "$year" ]; then year=$(date -u +%Y); fi
@@ -125,18 +119,18 @@ jobs:
           elif [ "$mode" = "batch" ]; then
             if [ -n "$codes" ]; then
               python -m collectors.price.kis_adjusted_backfill \
-                --year "$year" --max-codes "$count" --codes "$codes"
+                --year "$year" --max-codes "$count" --codes "$codes" --sleep-seconds 0.65
             else
               python -m collectors.price.kis_adjusted_backfill \
-                --year "$year" --max-codes "$count"
+                --year "$year" --max-codes "$count" --sleep-seconds 0.65
             fi
           elif [ "$mode" = "monitor" ]; then
             if [ -n "$codes" ]; then
               python -m collectors.price.kis_adjusted_sync \
-                --year "$year" --max-codes "$count" --codes "$codes"
+                --year "$year" --max-codes "$count" --codes "$codes" --sleep-seconds 0.65
             else
               python -m collectors.price.kis_adjusted_sync \
-                --year "$year" --max-codes "$count"
+                --year "$year" --max-codes "$count" --sleep-seconds 0.65
             fi
           elif [ "$mode" = "refresh" ]; then
             if [ -z "$codes" ]; then
@@ -145,23 +139,23 @@ jobs:
             fi
             python -m collectors.price.kis_adjusted_backfill \
               --year "$year" --max-codes "$count" \
-              --codes "$codes" --force-refresh
+              --codes "$codes" --force-refresh --sleep-seconds 0.65
           elif [ "$mode" = "investor" ]; then
             # KIS only returns a recent window; this cannot backfill 2010 data.
             if [ -n "$codes" ]; then
               python -m collectors.price.kis_investor_flow \
-                --year "$year" --max-codes "$count" --codes "$codes"
+                --year "$year" --max-codes "$count" --codes "$codes" --sleep-seconds 0.65
             else
               python -m collectors.price.kis_investor_flow \
-                --year "$year" --max-codes "$count"
+                --year "$year" --max-codes "$count" --sleep-seconds 0.65
             fi
           elif [ "$mode" = "daily" ]; then
             # Bootstrap a bounded KIS batch then monitor staged names.
             # The KRX daily job remains independent and authoritative.
             python -m collectors.price.kis_adjusted_backfill \
-              --year "$year" --max-codes "$count"
+              --year "$year" --max-codes "$count" --sleep-seconds 0.65
             python -m collectors.price.kis_adjusted_sync \
-              --year "$year" --max-codes 5000
+              --year "$year" --max-codes 5000 --sleep-seconds 0.65
           else
             echo "::error::Unknown collection mode"
             exit 1
