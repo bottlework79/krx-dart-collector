@@ -1,0 +1,4 @@
+audit=2015..2026
+clean_filter=observed_market_sessions_and_daily_close_jumps
+comparison=matched_entry_hold_5_20_60_trading_sessions
+source_data_unchanged=true
