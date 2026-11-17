@@ -1,0 +1,6 @@
+batch=annual_trade_policy_v1
+eval_years=2015..2026
+max_parallel=2
+strict_preflight=annual_price_coverage_and_synthetic_tests
+start_requested_by_user=2026-11-17T01:17:31Z
+no_scheduled_repeats=true
