@@ -25,9 +25,10 @@ on:
         required: false
         description: "Optional comma-separated six-digit codes; required for refresh"
   schedule:
-    # KRX whole-market price refresh 16:30 KST; KIS daily at 18:30 KST.
-    - cron: '30 9 * * 1-5'
-    # 2010-2026 historical catchup, 09:15-21:15 KST Mon-Sat.
+    # PAUSED 2026-11-17: ordinary KIS 18:30 KST daily price sync is
+    # suspended until the historical backfill/coverage gate is complete.
+    # Restore: - cron: '30 9 * * 1-5'
+    # Historical KIS backfill continues, 09:15-21:15 KST Mon-Sat.
     # Limited to 60 codes/attempt with conservative API pacing.
     - cron: '15 0-12 * * 1-6'
   push:
