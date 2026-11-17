@@ -1,0 +1,6 @@
+kis_adjusted_pilot=true
+credentials_scope=public_workflow_secrets
+source_repository=bottlework79/krx-stock-data
+stocks=900120,002070
+read_only_quotes=true
+no_api_key_in_git=true
