@@ -19,9 +19,11 @@ on:
         required: false
         type: number
         default: 45
-  schedule:
-    # Weekdays 16:30 KST (07:30 UTC), same as previous private workflow.
-    - cron: '30 7 * * 1-5'
+  # PAUSED 2026-11-17: KRX ordinary weekday refresh is disabled
+  # while KIS 2010-2026 historical adjusted price backfill is running.
+  # Restore after coverage review:
+  # schedule:
+  #   - cron: '30 7 * * 1-5'
 
 permissions:
   contents: read
