@@ -1,0 +1,99 @@
+name: KIS Full-Year Corporate Action Regression (2025/2026)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/kis_runs/start_kis_corporate_action_years_20261117.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kis-adjusted-krx-history-single-writer
+  cancel-in-progress: false
+
+jobs:
+  known-actions-full-year:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install pandas numpy requests
+      - name: Collect entire year adjusted prices for pre-audited anomalies
+        working-directory: private
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          python -m collectors.price.kis_adjusted_backfill \
+            --year 2025 --codes 900120 --max-codes 1
+          python -m collectors.price.kis_adjusted_backfill \
+            --year 2026 --codes 002070 --max-codes 1
+      - name: Confirm corrected action-window prices in year shards
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          details={}
+          for year,code,buy,sell in [
+             (2025,"900120","2025-07-08","2025-08-01"),
+             (2026,"002070","2026-04-07","2026-05-08")
+          ]:
+            f=Path(f"data/adjusted_kis/shards/market_{year}.pkl.gz")
+            m=Path(f"data/adjusted_kis/manifests/market_{year}.json")
+            shard=pd.read_pickle(f,compression="gzip")
+            meta=json.loads(m.read_text())
+            sub=shard.loc[shard["Code"].eq(code)].set_index("Date")
+            dates=[pd.Timestamp(buy),pd.Timestamp(sell)]
+            if any(x not in sub.index for x in dates):
+              raise SystemExit(f"Missing actual historical buy/sell date {code}")
+            entry,exit=(float(sub.loc[dates[i],"Open"]) for i in range(2))
+            details[code]={
+              "year":year, "status":meta["symbols"][code]["status"],
+              "matched":meta["symbols"][code]["matched_kis_dates"],
+              "missing":meta["symbols"][code]["missing_krx_dates"],
+              "entry_adjusted_open":entry,
+              "exit_adjusted_open":exit,
+              "adjusted_open_to_open_pct":round((exit/entry-1)*100,2),
+            }
+          print("KIS_KNOWN_SPLIT_PRICE_CHECK="+json.dumps(details,ensure_ascii=False))
+          Path("data/adjusted_kis/known_split_full_year_check.json").write_text(
+             json.dumps(details,ensure_ascii=False,indent=2),encoding="utf-8")
+          PY
+      - name: Save isolated verified KIS data in private repository
+        if: always()
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for p in data/adjusted_kis/shards/ data/adjusted_kis/manifests/; do
+            if [ -d "$p" ]; then git add -f -- "$p"; fi
+          done
+          if [ -f data/adjusted_kis/known_split_full_year_check.json ]; then
+            git add -f -- data/adjusted_kis/known_split_full_year_check.json
+          fi
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Verify full-year adjusted prices for 2025 stock consolidation and 2026 capital reduction'
+          for n in 1 2 3 4 5 6; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 4
+          done
+          exit 1
