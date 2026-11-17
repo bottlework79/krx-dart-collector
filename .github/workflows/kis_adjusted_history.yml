@@ -144,10 +144,10 @@ jobs:
             # KIS only returns a recent window; this cannot backfill 2010 data.
             if [ -n "$codes" ]; then
               python -m collectors.price.kis_investor_flow \
-                --year "$year" --max-codes "$count" --codes "$codes" --sleep-seconds 0.65
+                --year "$year" --max-codes "$count" --codes "$codes"
             else
               python -m collectors.price.kis_investor_flow \
-                --year "$year" --max-codes "$count" --sleep-seconds 0.65
+                --year "$year" --max-codes "$count"
             fi
           elif [ "$mode" = "daily" ]; then
             # Bootstrap a bounded KIS batch then monitor staged names.
