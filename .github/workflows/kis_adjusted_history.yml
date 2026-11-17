@@ -33,6 +33,7 @@ on:
   push:
     paths:
       - '.github/workflows/kis_adjusted_history.yml'
+      - '.github/kis_runs/backfill_now_20261117.flag'
 
 permissions:
   contents: read
@@ -70,7 +71,7 @@ jobs:
             validation.prices.test_kis_investor_flow \
             validation.prices.test_kis_quality_scheduler -v
       - name: Execute requested KIS action, no order endpoints
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, 'RUN_KIS_BACKFILL_NOW_20261117')
         working-directory: private
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
@@ -81,6 +82,11 @@ jobs:
           year="${{ inputs.year }}"
           count="${{ inputs.max_codes }}"
           codes="${{ inputs.codes }}"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            mode=backfill_auto
+            year=2010
+            count=150
+          fi
           if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
             if [ "${{ github.event.schedule }}" = "15 0-12 * * 1-6" ]; then
               mode=backfill_auto
