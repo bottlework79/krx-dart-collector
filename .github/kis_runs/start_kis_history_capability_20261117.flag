@@ -1,4 +1,0 @@
-test_oldest=2010
-historical=2014,2020,2026
-universe=2010_present_vs_2026_absent
-query=adjusted_OHLCV
