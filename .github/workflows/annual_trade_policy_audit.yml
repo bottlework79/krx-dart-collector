@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/ml_batches/start_annual_trade_policy_audit_20261117.flag'
       - '.github/ml_batches/start_annual_trade_policy_audit_clean_20261117.flag'
+      - '.github/ml_batches/start_annual_trade_policy_audit_market_sessions_20261117.flag'
 
 permissions:
   contents: read
