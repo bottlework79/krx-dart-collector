@@ -133,8 +133,10 @@ jobs:
           python - <<'PY'
           import json
           import requests
+          import tempfile
+          from pathlib import Path
           from collectors.price.kis_client import get_token,require
-          from collectors.price.kis_investor_flow import query_investor, normalize_investor
+          from collectors.price.kis_investor_flow import query_investor, normalize_investor, run
           s=requests.Session()
           key,secret=require("KIS_APP_KEY"),require("KIS_APP_SECRET")
           token=get_token(s,key,secret,log_reuse=True)
@@ -145,10 +147,18 @@ jobs:
             parsed=normalize_investor("005930",rows)
             if parsed.empty:
               raise RuntimeError("KIS investor rows could not be normalized")
+            with tempfile.TemporaryDirectory() as root:
+              result=run(year=2026,max_codes=1,codes=["005930"],
+                         data_dir="data",root=Path(root),
+                         get_rows=lambda _: rows,sleep_secs=0)
+              if result["staged_rows"]<1:
+                raise RuntimeError("Investor staging found no KRX-aligned rows")
             print("KIS_INVESTOR_LIVE_VERIFIED="+json.dumps({
               "code":"005930","rows":len(parsed),
+              "skipped_incomplete":len(parsed.attrs.get("skipped_incomplete_dates",[])),
               "first":str(parsed.Date.min().date()),
               "last":str(parsed.Date.max().date()),
+              "krx_aligned_staging_rows":result["staged_rows"],
               "columns":list(parsed.columns),
               "private_data_modified":False,
             },ensure_ascii=False),flush=True)
