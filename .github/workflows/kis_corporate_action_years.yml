@@ -37,10 +37,24 @@ jobs:
           KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
         run: |
           set -euo pipefail
-          python -m collectors.price.kis_adjusted_backfill \
-            --year 2025 --codes 900120 --max-codes 1
-          python -m collectors.price.kis_adjusted_backfill \
-            --year 2026 --codes 002070 --max-codes 1
+          # KIS OAuth may return 403 on tokens requested moments apart.
+          # Share ONE token and Session for both year-specific tests.
+          python - <<'PY'
+          import requests
+          from collectors.price.kis_adjusted_probe import get_token, query, require
+          from collectors.price.kis_adjusted_backfill import backfill
+          session = requests.Session()
+          app_key = require("KIS_APP_KEY")
+          app_secret = require("KIS_APP_SECRET")
+          token = get_token(session, app_key, app_secret)
+          def window(code, first, last):
+              return query(session, app_key, app_secret, token,
+                           code, first, last, adjusted=True)
+          backfill(year=2025, selected_codes=["900120"], max_codes=1,
+                   get_window=window)
+          backfill(year=2026, selected_codes=["002070"], max_codes=1,
+                   get_window=window)
+          PY
       - name: Confirm corrected action-window prices in year shards
         working-directory: private
         run: |
