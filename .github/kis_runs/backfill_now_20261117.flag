@@ -1,7 +1,7 @@
 request=RUN_KIS_BACKFILL_NOW_20261117
 mode=backfill_auto
 start_year=2010
-max_new_codes=150
+max_new_codes=500
 source=KRX-asof
 prices=KIS-adjusted-only
 private_commit=true
@@ -9,3 +9,6 @@ readonly=true
 
 acceleration=2026-11-17 500-stock historical batch after 30-test green run
 max_codes=500
+
+manual_followup=2026-11-17T08:30Z
+reason=run_next_500_now_without_waiting_for_cron
