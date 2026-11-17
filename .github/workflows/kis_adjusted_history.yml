@@ -85,17 +85,6 @@ jobs:
             year=2010
             count=1  # One-symbol bootstrap verifies self-dispatch; next run uses 500.
           fi
-          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
-            if [ "${{ github.event.schedule }}" = "15 0-12 * * 1-6" ]; then
-              mode=backfill_auto
-              year=2010
-              count=500
-            else
-              mode=daily
-              year=$(date -u +%Y)
-              count=20
-            fi
-          fi
           if [ -z "$mode" ]; then mode=stats; fi
           if [ -z "$year" ]; then year=$(date -u +%Y); fi
           if [ -z "$count" ]; then count=20; fi
