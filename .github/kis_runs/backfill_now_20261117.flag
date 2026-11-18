@@ -18,3 +18,8 @@ mode=backfill_auto
 first_run_codes=1
 following_runs_codes=500
 safety=only_after_successful_quality_and_private_checkpoint
+
+resume_after_opsq0008_diagnostic=2026-11-18
+observed=2020_status_8_of_8_live_quote_windows_ok
+code_guard=bounded_retry_then_fail_closed
+next=one_symbol_bootstrap_then_auto_chain_500
