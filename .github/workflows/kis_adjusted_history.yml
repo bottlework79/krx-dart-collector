@@ -104,7 +104,7 @@ jobs:
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           if [ "$mode" = "backfill_auto" ]; then
             python -m collectors.price.kis_backfill_scheduler \
-              --max-codes "$count" --sleep-seconds 0.65
+              --max-codes "$count" --sleep-seconds 1.0
           elif [ "$mode" = "quality" ]; then
             python -m collectors.price.kis_quality
           elif [ "$mode" = "stats" ]; then
