@@ -23,3 +23,7 @@ resume_after_opsq0008_diagnostic=2026-11-18
 observed=2020_status_8_of_8_live_quote_windows_ok
 code_guard=bounded_retry_then_fail_closed
 next=one_symbol_bootstrap_then_auto_chain_500
+
+recover_20211118_0849=OPSQ0008_2020_and_2021_live_probe_10_of_10_success
+provider_pacing_seconds=1.0
+quote_retry_delays_seconds=15_45_90_150
