@@ -1,0 +1,5 @@
+diagnostic=OPSQ0008
+asof=2026-11-18
+mode=read_only
+codes=005930,223250,223310,224060,226500
+no_trading=true
