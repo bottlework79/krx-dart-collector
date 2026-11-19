@@ -5,10 +5,6 @@ on:
   # Backup start/check only; after each success the next run dispatches immediately.
   schedule:
     - cron: '30 0 * * 1,3,5'
-  # One-shot workflow integration test; removed after confirmed success.
-  push:
-    paths:
-      - '.github/ml_research/chain_check_20261120.flag'
 
 permissions:
   contents: read
