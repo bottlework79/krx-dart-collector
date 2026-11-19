@@ -1,0 +1,71 @@
+name: Research ML - Scheduled Finite Hypothesis Queue (KRX Only)
+
+on:
+  workflow_dispatch:
+  # Every Mon/Wed/Fri 09:30 KST (UTC +09:00). 1 new fixed hypothesis per run.
+  schedule:
+    - cron: '30 0 * * 1,3,5'
+  # One-time bootstrap smoke test; removed after verification.
+  push:
+    paths:
+      - '.github/ml_research/bootstrap_20261120.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-krx-auto-research-single-writer
+  cancel-in-progress: false
+
+jobs:
+  offline-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout private KRX source and immutable research artifacts
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline data science dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Regression tests for cohort, temporal purge and sealed holdout
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_auto_research_v1 -v
+      - name: Evaluate exactly one preregistered research hypothesis
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.auto_research_v1
+      - name: Commit only PRIVATE research report and experiment ledger
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/auto_research_v1/
+          if git diff --cached --quiet; then
+            echo AUTO_ML_NO_NEW_HYPOTHESIS=true
+          else
+            git commit -m 'Record one bounded autonomous research fold comparison' >/dev/null
+            git fetch origin main >/dev/null
+            if ! git rebase origin/main >/dev/null; then
+              git rebase --abort || true
+              echo '::error::AUTO_ML_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            if ! git push origin HEAD:main >/dev/null; then
+              echo '::error::AUTO_ML_PRIVATE_PUSH_FAILED'
+              exit 1
+            fi
+            echo AUTO_ML_PRIVATE_RESEARCH_SAVED=true
+          fi
