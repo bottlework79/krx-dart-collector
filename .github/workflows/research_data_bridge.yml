@@ -44,6 +44,12 @@ jobs:
           python -m analysis.ml.research_data_bridge \
             --max-codes 70 --max-rows-per-year 120 \
             --pilot-rows-per-year 30
+      - name: Fit offline full-sample KRX baseline (research-only)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.research_bridge_baseline \
+            --input-dir data/ml/research_bridge_v1
       - name: Persist samples to PRIVATE research path only
         working-directory: private
         run: |
