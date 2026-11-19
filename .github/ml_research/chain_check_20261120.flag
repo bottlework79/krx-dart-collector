@@ -1,0 +1,5 @@
+KRX_AUTO_RESEARCH_CHAIN_TEST=2026-11-20
+current_candidate=histgb_shallow
+postfit_quality_gate=true
+require_private_commit_before_dispatch=true
+no_live_order_api=true
