@@ -1,6 +1,0 @@
-research=KRX-asof-2016-Q1
-validation=2019-2022
-sealed_year=2023
-max_experiments=5
-initial_smoke_test=true
-no_live_orders=true
