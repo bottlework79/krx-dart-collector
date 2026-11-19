@@ -1,0 +1,66 @@
+name: Direct ML Research - Private KRX Sample Bridge
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/ml_bridge/run_research_bridge_20261119.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: direct-ml-private-research-data-bridge
+  cancel-in-progress: false
+
+jobs:
+  export-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PRIVATE price research data
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline scientific dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Test research export on synthetic KRX history
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_research_data_bridge -v
+      - name: Export bounded KRX research sample (NO LIVE API)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.research_data_bridge \
+            --max-codes 70 --max-rows-per-year 120 \
+            --pilot-rows-per-year 30
+      - name: Persist samples to PRIVATE research path only
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/research_bridge_v1/
+          if git diff --cached --quiet; then
+            echo RESEARCH_BRIDGE_UNCHANGED=true
+          else
+            git commit -m 'Record bounded private KRX direct-ML research dataset' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::RESEARCH_BRIDGE_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo RESEARCH_BRIDGE_PRIVATE_SAVED=true
+          fi
