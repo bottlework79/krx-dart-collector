@@ -1,13 +1,18 @@
-name: Research ML - Scheduled Finite Hypothesis Queue (KRX Only)
+name: Research ML - Immediate Bounded Experiment Chain (KRX Only)
 
 on:
   workflow_dispatch:
-  # Every Mon/Wed/Fri 09:30 KST (UTC +09:00). 1 new fixed hypothesis per run.
+  # Backup start/check only; after each success the next run dispatches immediately.
   schedule:
     - cron: '30 0 * * 1,3,5'
+  # One-shot workflow integration test; removed after confirmed success.
+  push:
+    paths:
+      - '.github/ml_research/chain_check_20261120.flag'
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: private-krx-auto-research-single-writer
@@ -36,12 +41,32 @@ jobs:
         working-directory: private
         run: |
           set -euo pipefail
-          python -m unittest validation.ml.test_auto_research_v1 -v
+          python -m unittest \
+            validation.ml.test_auto_research_v1 \
+            validation.ml.test_auto_research_review_v1 -v
       - name: Evaluate exactly one preregistered research hypothesis
         working-directory: private
         run: |
           set -euo pipefail
           python -m analysis.ml.auto_research_v1
+      - name: Deterministic research review gate (NOT a ChatGPT review)
+        id: postfit
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.auto_research_review_v1
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          state=json.loads(Path('data/ml/auto_research_v1/review_state.json').read_text())
+          next_candidate=state['next_candidate'] or 'none'
+          # Never dispatch from unchecked/failed research review output.
+          if state['training_approved'] or state['chatgpt_review_completed']:
+              raise RuntimeError('Unexpected promotion or false ChatGPT review')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write(f'next_candidate={next_candidate}\\n')
+          print(f'AUTO_ML_NEXT_CANDIDATE={next_candidate}')
+          PY
       - name: Commit only PRIVATE research report and experiment ledger
         working-directory: private
         run: |
@@ -65,3 +90,17 @@ jobs:
             fi
             echo AUTO_ML_PRIVATE_RESEARCH_SAVED=true
           fi
+      - name: Immediately queue next preregistered hypothesis on success
+        if: ${{ success() && steps.postfit.outputs.next_candidate != 'none' && github.run_attempt == 1 }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # GITHUB_TOKEN may trigger workflow_dispatch (unlike a push event).
+          # One active writer and finite candidate ledger prevent fan-out.
+          gh api -X POST "/repos/${GITHUB_REPOSITORY}/actions/workflows/auto_ml_research.yml/dispatches" -f ref=main
+          echo AUTO_ML_NEXT_RUN_REQUESTED=true
+
+# STOP: failures, changed historical input SHA, bad tests, bad QA,
+# private git push/rebase failure, or dispatch failures never auto-advance.
+# Five fixed hypotheses only; a new research design needs ChatGPT review.
