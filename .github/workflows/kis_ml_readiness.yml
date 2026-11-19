@@ -13,11 +13,6 @@ on:
         type: number
         default: 2026
         required: true
-  # One-shot offline validation trigger, removed after the first live audit.
-  push:
-    paths:
-      - '.github/ml_audits/kis_readiness_20261119.flag'
-
 permissions:
   contents: read
 
