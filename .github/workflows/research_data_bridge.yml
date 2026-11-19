@@ -2,9 +2,6 @@ name: Direct ML Research - Private KRX Sample Bridge
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_bridge/run_research_bridge_20261119.flag'
 
 permissions:
   contents: read
