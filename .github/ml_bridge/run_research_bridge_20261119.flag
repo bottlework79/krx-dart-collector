@@ -7,3 +7,6 @@ holdout=2021
 private_only=true
 live_api=false
 no_order_endpoints=true
+
+full_sample_baseline=true
+training_approved=false
