@@ -64,7 +64,7 @@ jobs:
           if state['training_approved'] or state['chatgpt_review_completed']:
               raise RuntimeError('Unexpected promotion or false ChatGPT review')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
-              output.write(f'next_candidate={next_candidate}\\n')
+              output.write(f'next_candidate={next_candidate}\n')
           print(f'AUTO_ML_NEXT_CANDIDATE={next_candidate}')
           PY
       - name: Commit only PRIVATE research report and experiment ledger
