@@ -1,0 +1,81 @@
+name: KIS ML - Isolated Input and Corporate Action Risk Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: 'Start of staged KIS history'
+        type: number
+        default: 2010
+        required: true
+      end_year:
+        description: 'End of staged KIS history'
+        type: number
+        default: 2026
+        required: true
+  # One-shot offline validation trigger, removed after the first live audit.
+  push:
+    paths:
+      - '.github/ml_audits/kis_readiness_20261119.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kis-ml-readiness-audit
+  cancel-in-progress: false
+
+jobs:
+  isolated-kis-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout private staged KIS history and audit code
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline libraries (no KIS API authentication)
+        run: python -m pip install pandas numpy requests cryptography
+      - name: Test isolated ML data readiness gates
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_kis_input_readiness -v
+      - name: Audit staged 2010-2026 KIS and KRX adjustment factors
+        working-directory: private
+        env:
+          START_YEAR: ${{ inputs.start_year || '2010' }}
+          END_YEAR: ${{ inputs.end_year || '2026' }}
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_input_readiness \
+            --start-year "$START_YEAR" --end-year "$END_YEAR" \
+            --output-dir data/ml/kis_input_readiness_v1
+      - name: Save offline audit report in private repository only
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/kis_input_readiness_v1/
+          if git diff --cached --quiet; then
+            echo KIS_ML_AUDIT_UNCHANGED=true
+          else
+            git commit -m 'Record private KIS ML-readiness and corporate-action audit' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::KIS_ML_AUDIT_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo KIS_ML_AUDIT_PRIVATE_SAVED=true
+          fi
