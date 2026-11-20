@@ -1,0 +1,5 @@
+bootstrap=KIS-investor-history-after-successful-2010-pilot
+max_codes=20
+chain_left=3
+max_total_new_code_years=80
+order_or_balance_apis=false
