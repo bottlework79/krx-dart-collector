@@ -1,0 +1,50 @@
+name: ML V1 Extension - Frozen 60-day Label Overlap Audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/ml_research/v1_overlap_once_20261120.flag'
+permissions:
+  contents: read
+concurrency:
+  group: ml-v1-extension-overlap-readonly
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+          path: private
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Synthetic regression
+        working-directory: private
+        run: python -m unittest validation.ml.test_v1_extension_overlap_audit -v
+      - name: Frozen V1 read-only overlap source audit
+        working-directory: private
+        run: |
+          python -m analysis.ml.v1_extension_overlap_audit > /tmp/v1_overlap.jsonlog
+          python - <<'PY'
+          import json
+          r=json.loads(open('/tmp/v1_overlap.jsonlog').read().split('V1_EXTENSION_OVERLAP=',1)[1])
+          assert r['source_years_read']==list(range(2015,2023))
+          assert r['sealed_2023_read'] is False
+          assert not any(r[k] for k in ('training_approved','point_in_time_verified','tradable_strategy_approved'))
+          assert [r['folds'][str(y)]['rows'] for y in (2019,2020,2021,2022)]==[679,675,747,665]
+          print('V1_EXTENSION_OVERLAP_GATES_PASS=true')
+          print('V1_EXTENSION_OVERLAP_COUNTS='+json.dumps(r['folds']))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v1-extension-label-overlap
+          path: /tmp/v1_overlap.jsonlog
+          retention-days: 14
+          if-no-files-found: error
