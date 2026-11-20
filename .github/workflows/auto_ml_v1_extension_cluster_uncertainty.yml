@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen Symbol Cluster Uncertainty
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_research/v1_cluster_20261120.flag'
 permissions:
   contents: read
 jobs:
