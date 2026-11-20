@@ -1,0 +1,215 @@
+name: KIS Investor Flow - Historical Backfill and Resume (Private)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [pilot, auto, batch, plan, quality]
+        default: plan
+        description: "pilot=2010 two codes; auto=oldest pending; batch=selected year"
+        required: true
+      year:
+        type: number
+        default: 2010
+        required: true
+      max_codes:
+        type: number
+        default: 20
+        required: true
+        description: "1..100 distinct KRX stock-years per batch (auto/batch)"
+      codes:
+        type: string
+        default: ''
+        required: false
+        description: "Optional comma-separated six-digit KRX codes for batch"
+      chain_left:
+        type: number
+        default: 0
+        required: true
+        description: "0..20 additional auto runs; only auto mode"
+  # One-time bounded two-stock smoke test, remove after completion.
+  push:
+    paths:
+      - '.github/kis_runs/investor_history_pilot_20261120.flag'
+
+permissions:
+  contents: read
+  actions: write
+
+# Shared with existing KIS OHLCV/token operations: no concurrent OAuth writers.
+concurrency:
+  group: kis-auth-single-writer
+  cancel-in-progress: false
+
+jobs:
+  investor-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout private KRX as-of universe and secured token checkpoint
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline KIS data dependencies
+        run: python -m pip install pandas numpy requests cryptography
+      - name: Historical KIS investor backfill safety and resume regressions
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            validation.prices.test_kis_investor_history_backfill \
+            validation.ml.test_kis_investor_history_probe -v
+      - name: Execute read-only investor history backfill or quality
+        id: collect
+        working-directory: private
+        env:
+          MODE: ${{ inputs.mode }}
+          YEAR: ${{ inputs.year }}
+          MAX_CODES: ${{ inputs.max_codes }}
+          CODES: ${{ inputs.codes }}
+          CHAIN_LEFT: ${{ inputs.chain_left }}
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            mode=pilot
+            year=2010
+            count=2
+            codes="000020,005930"
+            remaining=0
+          else
+            mode="${MODE:-plan}"
+            year="${YEAR:-2010}"
+            count="${MAX_CODES:-20}"
+            codes="${CODES:-}"
+            remaining="${CHAIN_LEFT:-0}"
+          fi
+          if ! [[ "$year" =~ ^20[0-9]{2}$ ]] || (( year < 2010 || year > 2026 )); then
+            echo "::error::KIS investor history year must be 2010..2026"
+            exit 1
+          fi
+          if ! [[ "$count" =~ ^[0-9]+$ ]] || ((count<1 || count>100)); then
+            echo "::error::KIS investor history batch count must be 1..100"
+            exit 1
+          fi
+          if ! [[ "$remaining" =~ ^[0-9]+$ ]] || ((remaining>20)); then
+            echo "::error::KIS investor automatic chain must be 0..20"
+            exit 1
+          fi
+          if [ -n "$codes" ] && ! [[ "$codes" =~ ^[0-9]{6}(,[0-9]{6})*$ ]]; then
+            echo "::error::KIS investor codes must be comma-separated 6 digit codes"
+            exit 1
+          fi
+          if [[ "$mode" != auto && "$remaining" != 0 ]]; then
+            echo "::error::Only auto mode may chain additional runs"
+            exit 1
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "max_codes=$count" >> "$GITHUB_OUTPUT"
+          echo "chain_left=$remaining" >> "$GITHUB_OUTPUT"
+          echo "KIS_INVESTOR_HISTORY_MODE=$mode year=$year batch_limit=$count chain_left=$remaining"
+          if [ "$mode" = pilot ]; then
+            python -m collectors.price.kis_investor_history_backfill \
+              --mode batch --year 2010 --max-codes 2 \
+              --codes 000020,005930 --sleep-seconds 1.0
+          elif [ "$mode" = auto ]; then
+            python -m collectors.price.kis_investor_history_backfill \
+              --mode auto --max-codes "$count" --sleep-seconds 1.0
+          elif [ "$mode" = batch ]; then
+            if [ -n "$codes" ]; then
+              python -m collectors.price.kis_investor_history_backfill \
+                --mode batch --year "$year" --max-codes "$count" \
+                --codes "$codes" --sleep-seconds 1.0
+            else
+              python -m collectors.price.kis_investor_history_backfill \
+                --mode batch --year "$year" --max-codes "$count" \
+                --sleep-seconds 1.0
+            fi
+          elif [ "$mode" = plan ]; then
+            python -m collectors.price.kis_investor_history_backfill --mode plan
+          elif [ "$mode" = quality ]; then
+            python -m collectors.price.kis_investor_history_backfill \
+              --mode quality --year "$year"
+          else
+            echo "::error::Unsupported investor historical backfill mode"
+            exit 1
+          fi
+      - name: Save private per-stock checkpoints even after collector failure
+        id: persist
+        if: always() && steps.checkout.outcome == 'success'
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ -d data/kis_investor_history ]; then
+            git add -A -- data/kis_investor_history/
+          fi
+          if [ -f data/adjusted_kis/auth/token.enc.json ]; then
+            git add -- data/adjusted_kis/auth/token.enc.json
+          fi
+          if git diff --cached --quiet; then
+            echo "INVESTOR_HISTORY_CHECKPOINT_UNCHANGED=true"
+          else
+            git commit -m 'Save private KIS investor history shard, manifest and quality' >/dev/null
+            git fetch origin main >/dev/null
+            if ! git rebase origin/main >/dev/null; then
+              git rebase --abort || true
+              echo "::error::INVESTOR_HISTORY_PRIVATE_REBASE_FAILED"
+              exit 1
+            fi
+            if ! git push origin HEAD:main >/dev/null; then
+              echo "::error::INVESTOR_HISTORY_PRIVATE_PUSH_FAILED"
+              exit 1
+            fi
+            echo "INVESTOR_HISTORY_PRIVATE_CHECKPOINT_SAVED=true"
+          fi
+      - name: Decide next batch from persisted private checkpoint
+        id: next
+        if: success() && steps.collect.outputs.mode == 'auto' && steps.collect.outputs.chain_left != '0'
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from collectors.price.kis_investor_history_backfill import choose_next
+          plan=choose_next()
+          more=plan.get('year') is not None and not plan['missing_krx_years']
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
+              out.write('has_more='+str(more).lower()+'\n')
+          print('INVESTOR_HISTORY_CHAIN_PLAN='+json.dumps({
+              'more':more,'year':plan.get('year'),'policy':plan.get('policy'),
+              'missing_reference_years':plan['missing_krx_years'],
+              'ready_for_machine_learning':False,
+          },ensure_ascii=False))
+          PY
+      - name: Start next bounded KIS investor batch immediately
+        if: success() && github.run_attempt == 1 && steps.next.outputs.has_more == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COUNT: ${{ steps.collect.outputs.max_codes }}
+          LEFT: ${{ steps.collect.outputs.chain_left }}
+        run: |
+          set -euo pipefail
+          if ((LEFT <= 0)); then
+            echo "::error::Invalid remaining investor history chain budget"
+            exit 1
+          fi
+          gh workflow run kis_investor_history_backfill.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=auto -f year=2010 -f max_codes="$COUNT" \
+            -f chain_left="$((LEFT - 1))"
+          echo INVESTOR_HISTORY_NEXT_RUN_REQUESTED=true
+
+# Research-only stage; no KIS order/balance APIs. Hard 20-run chain cap.
