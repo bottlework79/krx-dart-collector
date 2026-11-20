@@ -3,3 +3,5 @@ model=random_forest_shallow
 calendar_blocks=quarters
 repeats=400
 sealed_year=2023
+
+Retry once after purged-quarter fix; no original data changes. 2026-11-21.
