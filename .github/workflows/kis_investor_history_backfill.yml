@@ -27,11 +27,6 @@ on:
   # Immediate workflow_dispatch remains the primary, fast chaining mechanism.
   schedule:
     - cron: '30 0 * * *'  # Daily 09:30 KST, UTC+09
-  # One-shot bootstrap; removed after first continuous-run verification.
-  push:
-    paths:
-      - '.github/kis_runs/investor_history_continuous_20261120.flag'
-
 permissions:
   contents: read
   actions: write
