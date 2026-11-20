@@ -1,0 +1,6 @@
+mode=pilot
+year=2010
+codes=000020,005930
+max_codes=2
+max_chain=0
+live_readonly=true
