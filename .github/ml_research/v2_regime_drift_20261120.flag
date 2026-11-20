@@ -1,4 +1,0 @@
-run=V2-price-market-regime-drift
-read_sources=2015-2022
-sealed=2023
-model_fit=false
