@@ -32,6 +32,7 @@ on:
   push:
     paths:
       - '.github/kis_runs/investor_history_pilot_20261120.flag'
+      - '.github/kis_runs/investor_history_auto_20261120.flag'
 
 permissions:
   contents: read
@@ -83,11 +84,19 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            mode=pilot
-            year=2010
-            count=2
-            codes="000020,005930"
-            remaining=0
+            if [ "${{ github.event.head_commit.message }}" = "RUN_KIS_INVESTOR_HISTORY_AUTO_20261120" ]; then
+              mode=auto
+              year=2010
+              count=20
+              codes=""
+              remaining=3   # Four total bounded batches; never unlimited.
+            else
+              mode=pilot
+              year=2010
+              count=2
+              codes="000020,005930"
+              remaining=0
+            fi
           else
             mode="${MODE:-plan}"
             year="${YEAR:-2010}"
