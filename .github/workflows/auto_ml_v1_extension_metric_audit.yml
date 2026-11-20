@@ -1,0 +1,37 @@
+name: ML V1 Extension - Frozen Ranking Metric Audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/ml_research/v1_extension_metric_audit_20261120.flag'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+          path: private
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Synthetic regression
+        working-directory: private
+        run: python -m unittest validation.ml.test_v1_extension_metric_audit -v
+      - name: Frozen V1 source report
+        working-directory: private
+        run: |
+          python -m analysis.ml.v1_extension_metric_audit > /tmp/v1_extension_metric_audit.log
+          cat /tmp/v1_extension_metric_audit.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v1-extension-ranking-metric-audit
+          path: /tmp/v1_extension_metric_audit.log
+          retention-days: 14
+          if-no-files-found: error
