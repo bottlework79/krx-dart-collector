@@ -2,10 +2,6 @@ name: ML V2 - Read Only V1 Diagnostic Audit (Private)
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_runs/v2_diagnostic_bootstrap_20261120.flag'
-
 permissions:
   contents: read
 
