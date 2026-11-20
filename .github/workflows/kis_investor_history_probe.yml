@@ -1,0 +1,73 @@
+name: KIS Investor History - 2010 Date Capability (Read Only)
+
+on:
+  workflow_dispatch:
+  # One-time bootstrap; removed after observing the live result.
+  push:
+    paths:
+      - '.github/kis_probes/investor_history_20261120.flag'
+
+permissions:
+  contents: read
+
+# The KIS token cache is shared with all other KIS quotation workflows.
+concurrency:
+  group: kis-auth-single-writer
+  cancel-in-progress: false
+
+jobs:
+  probe-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout PRIVATE KRX, KIS client and encrypted token cache
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          path: private
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline dependencies
+        run: python -m pip install pandas numpy requests cryptography
+      - name: Historical investor API schema and privacy regression
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_kis_investor_history_probe -v
+      - name: Probe five bounded historical dates with one authenticated connection
+        working-directory: private
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_investor_history_probe
+      - name: Save PRIVATE report and encrypted token checkpoint only
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/kis_investor_history_probe_v1/report.json
+          if test -f data/adjusted_kis/auth/token.enc.json; then
+            git add -- data/adjusted_kis/auth/token.enc.json
+          fi
+          if git diff --cached --quiet; then
+            echo KIS_INVESTOR_HISTORY_NO_CHANGES=true
+          else
+            git commit -m 'Save private KIS investor historical date capability check' >/dev/null
+            git fetch origin main >/dev/null
+            if ! git rebase origin/main >/dev/null; then
+              git rebase --abort || true
+              echo '::error::KIS_INVESTOR_HISTORY_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main >/dev/null
+            echo KIS_INVESTOR_HISTORY_PRIVATE_SAVED=true
+          fi
+
+# No orders, no account endpoints, no raw amounts/logging, no public artifacts.
