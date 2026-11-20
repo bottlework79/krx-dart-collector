@@ -1,0 +1,5 @@
+probe=2010,2015,2020,2026
+api=investor-trade-by-stock-daily
+tr_id=FHPTJ04160001
+live_read_only=true
+max_requests=5
