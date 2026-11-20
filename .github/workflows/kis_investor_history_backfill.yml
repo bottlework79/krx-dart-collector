@@ -28,11 +28,6 @@ on:
         default: 0
         required: true
         description: "0..20 additional auto runs; only auto mode"
-  # One-time bounded two-stock smoke test, remove after completion.
-  push:
-    paths:
-      - '.github/kis_runs/investor_history_pilot_20261120.flag'
-      - '.github/kis_runs/investor_history_auto_20261120.flag'
 
 permissions:
   contents: read
