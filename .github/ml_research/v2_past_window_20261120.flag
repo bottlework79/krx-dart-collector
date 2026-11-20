@@ -2,3 +2,5 @@ mode=readonly-past-window-v2
 input_years=2015-2022
 seals=2023
 verify_regressions=true
+
+test_fixture_alignment_fix=20261120_v2
