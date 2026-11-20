@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen Top10 Concentration Audit
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/auto_ml_v1_extension_top10_concentration.yml'
 permissions:
   contents: read
 concurrency:
