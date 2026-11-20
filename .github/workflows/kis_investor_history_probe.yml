@@ -2,10 +2,6 @@ name: KIS Investor History - 2010 Date Capability (Read Only)
 
 on:
   workflow_dispatch:
-  # One-time bootstrap; removed after observing the live result.
-  push:
-    paths:
-      - '.github/kis_probes/investor_history_20261120.flag'
 
 permissions:
   contents: read
@@ -38,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest validation.ml.test_kis_investor_history_probe -v
-      - name: Probe five bounded historical dates with one authenticated connection
+      - name: Probe eight bounded historical dates with one authenticated connection
         working-directory: private
         env:
           KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
