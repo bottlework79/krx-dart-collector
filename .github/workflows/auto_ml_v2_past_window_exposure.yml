@@ -1,0 +1,46 @@
+name: ML V2 - Past 160-row Zero Volume Exposure Audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ml-v2-past-window-exposure
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+          path: private
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Synthetic regression guards
+        working-directory: private
+        run: python -m unittest validation.ml.test_v2_past_window_exposure -v
+      - name: Read-only historical source and frozen-fold audit
+        working-directory: private
+        run: |
+          python -m analysis.ml.v2_past_window_exposure --output /tmp/v2_past_window_exposure.json
+          python - <<'PY'
+          import json
+          r=json.load(open('/tmp/v2_past_window_exposure.json'))
+          assert r['source_years_read']==list(range(2015,2023))
+          assert r['sealed_year_used'] is False
+          assert not any(r[k] for k in ('training_approved','point_in_time_verified','tradable_strategy_approved'))
+          assert [r['per_year'][str(y)]['frozen_fold']['rows'] for y in (2019,2020,2021,2022)]==[679,675,747,665]
+          print('V2_PAST_WINDOW_GATES_PASS=true')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2-past-window-exposure
+          path: /tmp/v2_past_window_exposure.json
+          retention-days: 14
+          if-no-files-found: error
