@@ -2,9 +2,6 @@ name: ML V1 Extension - Frozen Calendar Quarter Block Sensitivity
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_research/v1_calendar_block_20261120.flag'
 
 permissions:
   contents: read
