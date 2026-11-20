@@ -1,8 +1,5 @@
 name: ML V2 - 2020 Dated Event Candidate Queue
 on:
-  push:
-    paths:
-      - '.github/workflows/auto_ml_v2_2020_event_queue.yml'
   workflow_dispatch:
 permissions:
   contents: read
