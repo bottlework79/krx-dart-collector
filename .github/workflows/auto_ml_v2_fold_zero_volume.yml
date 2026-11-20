@@ -1,6 +1,9 @@
 name: ML V2 - Frozen Fold Zero Volume Audit
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/auto_ml_v2_fold_zero_volume.yml'
 permissions:
   contents: read
 concurrency:
