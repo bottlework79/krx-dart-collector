@@ -24,9 +24,12 @@ on:
         default: ''
         required: false
         description: "Optional comma-separated six-digit codes; required for refresh"
-  # KRX/KIS ordinary daily schedules remain paused for history backfill.
-  # Historical batches now chain by workflow_dispatch after verified success.
-  # No cron: prevents simultaneous queued/scheduled runs and empty hourly waits.
+  # Restored 2026-11-20 at user's request: weekday 18:30 KST
+  # (09:30 UTC) follows 16:30 KST KRX daily refresh.
+  # KIS price sync and investor-flow history share kis-auth-single-writer.
+  schedule:
+    - cron: '30 9 * * 1-5'
+  # Historical backfill keeps its separate workflow_dispatch chain.
   push:
     paths:
       - '.github/kis_runs/backfill_now_20261117.flag'
@@ -80,10 +83,17 @@ jobs:
           year="${{ inputs.year }}"
           count="${{ inputs.max_codes }}"
           codes="${{ inputs.codes }}"
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            # Scheduled mode is explicit: workflow_dispatch default is stats.
+            # Running after the KRX daily update enables same-day matching.
+            mode=daily
+            year=$(date -u +%Y)
+            count=20
+            codes=""
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
             mode=backfill_auto
             year=2010
-            count=1  # One-symbol bootstrap verifies self-dispatch; next run uses 500.
+            count=1  # Historical one-symbol bootstrap; then 500 on the chain.
           fi
           if [ -z "$mode" ]; then mode=stats; fi
           if [ -z "$year" ]; then year=$(date -u +%Y); fi
