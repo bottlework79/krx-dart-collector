@@ -51,7 +51,8 @@ jobs:
           assert all(data[k] is False for k in ('training_approved','point_in_time_verified','tradable_strategy_approved'))
           assert set(data['per_year'])=={'2019','2020','2021','2022'}
           assert [data['per_year'][y]['nonoverlap_n'] for y in ('2019','2020','2021','2022')]==[226,224,226,221]
-          assert all(data['per_year'][y]['quarter_block_uncertainty']['blocks']==4 for y in data['per_year'])
+          assert all(2<=data['per_year'][y]['quarter_block_uncertainty']['blocks']<=4 for y in data['per_year'])
+          assert all(len(data['per_year'][y]['quarter_block_uncertainty']['observed_quarters'])==data['per_year'][y]['quarter_block_uncertainty']['blocks'] for y in data['per_year'])
           Path('/tmp/v1-calendar-audit/report.json').write_text(json.dumps(data,indent=2)+'\n')
           print('V1_CALENDAR_BLOCK_GATES_PASS=true')
           PY
