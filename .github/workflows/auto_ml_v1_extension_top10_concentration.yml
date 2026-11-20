@@ -1,0 +1,57 @@
+name: ML V1 Extension - Frozen Top10 Concentration Audit
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/auto_ml_v1_extension_top10_concentration.yml'
+permissions:
+  contents: read
+concurrency:
+  group: private-krx-v1-top10-concentration-audit
+  cancel-in-progress: false
+jobs:
+  readonly-concentration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout private frozen research source
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Seven synthetic regression guards
+        working-directory: private
+        run: python -m unittest validation.ml.test_v1_extension_top10_concentration -v
+      - name: Frozen model parity and top10 concentration
+        working-directory: private
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/v1-top10
+          python -m analysis.ml.v1_extension_top10_concentration_run | tee /tmp/v1-top10/run.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          line=next(x for x in Path('/tmp/v1-top10/run.log').read_text().splitlines() if x.startswith('V1_TOP10_CONCENTRATION='))
+          data=json.loads(line.split('=',1)[1])
+          assert data['sealed_2023_read'] is False
+          assert all(data[k] is False for k in ('training_approved','point_in_time_verified','tradable_strategy_approved'))
+          assert set(data['per_year'])=={'2019','2020','2021','2022'}
+          assert [data['per_year'][y]['nonoverlap_n'] for y in ('2019','2020','2021','2022')]==[226,224,226,221]
+          Path('/tmp/v1-top10/report.json').write_text(json.dumps(data,indent=2)+'\n')
+          print('V1_TOP10_CONCENTRATION_GATES_PASS=true')
+          PY
+      - name: Upload aggregate report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-frozen-top10-concentration
+          path: /tmp/v1-top10/report.json
+          if-no-files-found: error
