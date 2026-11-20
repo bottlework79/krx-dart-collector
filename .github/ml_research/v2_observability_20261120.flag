@@ -1,0 +1,6 @@
+purpose=diagnose-2020-ranking-collapse
+scope=2015-2022
+folds=2019,2020,2021,2022
+sealed2023=excluded
+private_datasets=read_only
+model_fit=false
