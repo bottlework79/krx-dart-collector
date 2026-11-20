@@ -1,6 +1,10 @@
 name: ML V2 - Past 160-row Zero Volume Exposure Audit
 on:
   workflow_dispatch:
+  # One-time verified bootstrap; removed immediately after smoke test.
+  push:
+    paths:
+      - '.github/ml_research/v2_past_window_20261120.flag'
 permissions:
   contents: read
 concurrency:
