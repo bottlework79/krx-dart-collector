@@ -1,0 +1,4 @@
+mode=readonly-past-window-v2
+input_years=2015-2022
+seals=2023
+verify_regressions=true
