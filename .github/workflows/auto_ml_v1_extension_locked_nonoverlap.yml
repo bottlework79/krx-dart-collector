@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen RF Nonoverlap Evaluation
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_research/v1_nonoverlap_20261120.flag'
 permissions:
   contents: read
 concurrency:
