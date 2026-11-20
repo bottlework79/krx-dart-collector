@@ -2,9 +2,6 @@ name: ML V2 - Volatility-Relative Feature Fixed A/B (Research Only)
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_research/v2_regime_robust_ab_20261120.flag'
 
 permissions:
   contents: read
