@@ -1,0 +1,71 @@
+name: ML V2 - V1 Outcome Observability and Corporate-Action Window Audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/ml_research/v2_observability_20261120.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-v2-observability-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-v1-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout private original V1 historical KRX and ledger (read only)
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+          path: private
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only scientific dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Verify synthetic label observability and sealed-year exclusion
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_observability_audit -v
+      - name: Audit historical year-by-year missing labels and quality windows
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.v2_observability_audit \
+            --input-dir data/ml/auto_research_v1 \
+            --output /tmp/v2_observability_audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('/tmp/v2_observability_audit.json').read_text())
+          assert report['development_years']==[2019,2020,2021,2022]
+          assert report['source_years_read']==list(range(2015,2023))
+          assert report['selected_symbols']==80
+          assert report['sealed_year_used'] is False
+          assert not report['training_approved']
+          assert not report['point_in_time_verified']
+          assert not report['tradable_strategy_approved']
+          for year in (2019,2020,2021,2022):
+              assert report['per_year'][str(year)]['development_fold_eligible']>0
+          print('V2_OBSERVABILITY_FOLD_SHA_AND_SEALED_YEAR_GATE_PASS=true')
+          PY
+      - name: Upload read-only diagnostic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-observability-audit
+          path: /tmp/v2_observability_audit.json
+          if-no-files-found: error
+          retention-days: 14
+
+# Never updates existing training models, historical KRX, KIS, or private results.
+# Outcome data is used only for research quality accounting, never for signals.
