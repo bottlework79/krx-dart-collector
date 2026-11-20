@@ -1,0 +1,66 @@
+name: ML V2 - Frozen KRX Trading Discontinuity Audit
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/ml_research/v2_discontinuity_20261120.flag'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-v2-discontinuity-audit-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout private frozen historical KRX research snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          path: private
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only analysis dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib
+      - name: Synthetic regression tests
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_trading_discontinuity_audit -v
+      - name: Audit historical raw jumps and zero-volume gaps
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.v2_trading_discontinuity_audit \
+            --input-dir data/ml/auto_research_v1 \
+            --output /tmp/v2_trading_discontinuity.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/v2_trading_discontinuity.json').read_text())
+          assert r["development_years"]==[2019,2020,2021,2022]
+          assert not r["sealed_year_used"]
+          assert r["selected_symbols"]==80
+          assert not r["training_approved"] and not r["point_in_time_verified"]
+          assert not r["tradable_strategy_approved"]
+          print("V2_DISCONTINUITY_AUDIT_GATES_PASS=true")
+          PY
+      - name: Upload descriptive results only
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-frozen-trading-discontinuity-audit
+          path: /tmp/v2_trading_discontinuity.json
+          if-no-files-found: error
+          retention-days: 14
+
+# No modification of source KRX/KIS, production models, orders or sealed 2023.
