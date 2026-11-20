@@ -25,9 +25,5 @@ jobs:
       - name: Read-only dated KRX event candidates
         working-directory: private
         run: python -m analysis.ml.v2_2020_event_queue --output /tmp/v2_2020_event_queue.json
-      - name: Store private candidate artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: v2-2020-event-queue-private-investigation
-          path: /tmp/v2_2020_event_queue.json
-          retention-days: 7
+      # Full dated event list stays in runner memory; no public artifact upload.
+      # Public logs contain only aggregate counts; do not expose private code/date rows.
