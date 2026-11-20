@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen 60-day Label Overlap Audit
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/ml_research/v1_overlap_once_20261120.flag'
 permissions:
   contents: read
 concurrency:
