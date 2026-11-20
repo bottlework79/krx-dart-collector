@@ -1,5 +1,0 @@
-run=fixed-v2-regime-robust-ab
-train=2019..2022-purged
-sealed2023=excluded
-same-hyperparameters=true
-research_only=true
