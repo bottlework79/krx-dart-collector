@@ -1,6 +1,9 @@
 name: ML V2 - 2020 Dated Event Candidate Queue
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/v2_event_queue_bootstrap_20261121.txt'
 permissions:
   contents: read
 jobs:
