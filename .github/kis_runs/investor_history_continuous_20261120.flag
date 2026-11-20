@@ -1,0 +1,6 @@
+intent=resume-2010-to-2026
+mode=auto
+max_codes=100
+chain=until-no-eligible-records
+recovery_schedule=daily
+read_only=true
