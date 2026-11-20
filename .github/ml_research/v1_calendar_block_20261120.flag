@@ -1,0 +1,5 @@
+readonly=true
+model=random_forest_shallow
+calendar_blocks=quarters
+repeats=400
+sealed_year=2023
