@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen Leave Largest Quarter Out
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/auto_ml_v1_extension_leave_quarter.yml
 permissions:
   contents: read
 concurrency:
