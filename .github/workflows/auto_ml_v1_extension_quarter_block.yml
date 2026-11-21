@@ -1,9 +1,6 @@
 name: ML V1 Extension - Frozen Quarter Block 12
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/auto_ml_v1_extension_quarter_block.yml
 permissions:
   contents: read
 concurrency:
