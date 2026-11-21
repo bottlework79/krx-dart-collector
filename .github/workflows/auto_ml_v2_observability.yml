@@ -2,6 +2,9 @@ name: ML V2 - V1 Outcome Observability and Corporate-Action Window Audit
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/auto_ml_v2_observability.yml'
 permissions:
   contents: read
 
@@ -55,11 +58,38 @@ jobs:
               assert report['per_year'][str(year)]['development_fold_eligible']>0
           print('V2_OBSERVABILITY_FOLD_SHA_AND_SEALED_YEAR_GATE_PASS=true')
           PY
+      - name: Verify 2020 event and official matcher synthetic guards
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_2020_event_queue validation.ml.test_v2_event_official_match -v
+      - name: Export 2020 dated zero-volume observations without official attribution
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.v2_2020_event_queue --output /tmp/v2_2020_event_queue.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('/tmp/v2_2020_event_queue.json').read_text())
+          assert report['sealed_year_used'] is False
+          assert report['source_years_read']==list(range(2015,2023))
+          assert not report['official_exchange_verified']
+          assert not report['training_approved']
+          assert not report['point_in_time_verified']
+          assert not report['tradable_strategy_approved']
+          runs=report['zero_volume_runs']
+          assert sum(r['observations'] for r in runs)==report['event_counts']['zero_volume']
+          assert all(r['first_date'][:4]=='2020' and r['last_date'][:4]=='2020' for r in runs)
+          print('V2_DATED_RUNS='+json.dumps(runs,ensure_ascii=False))
+          PY
       - name: Upload read-only diagnostic artifact
         uses: actions/upload-artifact@v4
         with:
           name: v2-observability-audit
-          path: /tmp/v2_observability_audit.json
+          path: |
+            /tmp/v2_observability_audit.json
+            /tmp/v2_2020_event_queue.json
           if-no-files-found: error
           retention-days: 14
 
