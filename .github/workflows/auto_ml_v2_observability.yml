@@ -80,6 +80,37 @@ jobs:
           assert all(r['first_date'][:4]=='2020' and r['last_date'][:4]=='2020' for r in runs)
           print('V2_DATED_RUNS='+json.dumps(runs,ensure_ascii=False))
           PY
+      - name: Audit 2020 exclusion rows against frozen V1 source (read only)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_2020_exclusion_rows -v
+          python -m analysis.ml.v2_2020_exclusion_rows --output /tmp/v2_2020_exclusion_rows.json > /tmp/v2_exclusion_stdout.log
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          report=json.loads(Path('/tmp/v2_2020_exclusion_rows.json').read_text())
+          assert report['source_years_read']==list(range(2015,2023))
+          assert report['sealed_year_used'] is False
+          assert report['official_verified'] is False
+          assert not report['training_approved']
+          assert not report['point_in_time_verified']
+          assert not report['tradable_strategy_approved']
+          rows=report['suspects']
+          assert len(rows)==report['excluded_rows']
+          assert all(r['date'].startswith('2020-') for r in rows)
+          assert len({(r['code'],r['date']) for r in rows})==len(rows)
+          counts=Counter(reason for r in rows for reason in r['reasons'])
+          assert dict(counts)==report['reason_counts']
+          print('V2_EXCLUSION_2020_SUMMARY='+json.dumps({
+              'excluded_rows':len(rows),'reason_counts':dict(counts),
+              'jump_past_rows':sum(r['past_jump_window'] for r in rows),
+              'jump_future_rows':sum(r['future_jump_window'] for r in rows),
+              'unique_symbols':len({r['code'] for r in rows}),
+              'comparison_37_is_same_population':False
+          },ensure_ascii=False))
+          PY
       - name: Upload read-only diagnostic artifact
         uses: actions/upload-artifact@v4
         with:
@@ -87,6 +118,7 @@ jobs:
           path: |
             /tmp/v2_observability_audit.json
             /tmp/v2_2020_event_queue.json
+            /tmp/v2_2020_exclusion_rows.json
           if-no-files-found: error
           retention-days: 14
 
