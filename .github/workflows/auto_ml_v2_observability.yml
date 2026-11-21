@@ -2,6 +2,9 @@ name: ML V2 - V1 Outcome Observability and Corporate-Action Window Audit
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/auto_ml_v2_observability.yml'
 permissions:
   contents: read
 
@@ -111,6 +114,26 @@ jobs:
               'comparison_37_is_same_population':False
           },ensure_ascii=False))
           PY
+      - name: Verify and extract 2017-2022 raw daily jump provenance (read only)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_raw_jump_provenance -v
+          python - <<'PY'
+          from analysis.ml.v2_raw_jump_provenance import run
+          report=run(output='/tmp/v2_raw_jump_provenance.json')
+          assert report['source_years_read']==list(range(2015,2023))
+          assert report['event_years']==list(range(2017,2023))
+          assert report['selected_symbols']==80
+          assert not report['sealed_year_used']
+          assert not report['official_corporate_action_verified']
+          assert not report['training_approved']
+          assert not report['point_in_time_verified']
+          assert not report['tradable_strategy_approved']
+          assert len({(e['code'],e['date']) for e in report['raw_daily_jump_events']})==report['raw_daily_jump_count']
+          import json
+          print('V2_RAW_JUMP_EVENTS='+json.dumps(report['raw_daily_jump_events'],ensure_ascii=False))
+          PY
       - name: Upload read-only diagnostic artifact
         uses: actions/upload-artifact@v4
         with:
@@ -119,6 +142,7 @@ jobs:
             /tmp/v2_observability_audit.json
             /tmp/v2_2020_event_queue.json
             /tmp/v2_2020_exclusion_rows.json
+            /tmp/v2_raw_jump_provenance.json
           if-no-files-found: error
           retention-days: 14
 
