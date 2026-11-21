@@ -1,6 +1,9 @@
 name: ML V2 - V1 Outcome Observability and Corporate-Action Window Audit
 
 on:
+  push:
+    paths:
+      - '.github/workflows/auto_ml_v2_observability.yml'
   workflow_dispatch:
 permissions:
   contents: read
