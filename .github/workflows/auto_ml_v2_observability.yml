@@ -60,6 +60,11 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest validation.ml.test_v2_2020_event_queue validation.ml.test_v2_event_official_match -v
+      - name: Verify official disclosure provenance fail-closed gate (synthetic only)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_official_evidence_gate -v
       - name: Export 2020 dated zero-volume observations without official attribution
         working-directory: private
         run: |
