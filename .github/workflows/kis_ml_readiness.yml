@@ -60,8 +60,8 @@ jobs:
         working-directory: private
         run: |
           set -euo pipefail
-          python -m analysis.ml.unified_kis_training \\
-            --mode audit --max-codes 80 \\
+          python -m analysis.ml.unified_kis_training \
+            --mode audit --max-codes 80 \
             --output-dir data/ml/research/audits
       - name: Save offline audit report in private repository only
         working-directory: private
