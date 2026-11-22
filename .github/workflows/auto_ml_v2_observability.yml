@@ -111,6 +111,11 @@ jobs:
           assert set(report['reason_symbol_concentration'])==set(counts)
           assert all(report['reason_symbol_concentration'][k]['excluded_rows']==v for k,v in counts.items())
           print('V2_EXCLUSION_2020_REASON_CONCENTRATION='+json.dumps(report['reason_symbol_concentration'],ensure_ascii=False))
+          rates=report['symbol_exclusion_rates']
+          assert rates['total_excluded']==len(rows)
+          assert rates['total_sampled']>=rates['total_excluded']
+          assert sum(r['sampled_rows'] for r in rates['symbols'])==rates['total_sampled']
+          print('V2_EXCLUSION_2020_DENOMINATOR_RATES='+json.dumps(rates,ensure_ascii=False))
           print('V2_EXCLUSION_2020_SUMMARY='+json.dumps({
               'excluded_rows':len(rows),'reason_counts':dict(counts),
               'jump_past_rows':sum(r['past_jump_window'] for r in rows),
