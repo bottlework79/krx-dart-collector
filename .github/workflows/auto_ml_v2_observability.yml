@@ -113,7 +113,8 @@ jobs:
               'jump_past_rows':sum(r['past_jump_window'] for r in rows),
               'jump_future_rows':sum(r['future_jump_window'] for r in rows),
               'unique_symbols':len({r['code'] for r in rows}),
-              'comparison_37_is_same_population':False,\n              'symbol_concentration':report['symbol_concentration']
+              'comparison_37_is_same_population':False,
+              'symbol_concentration':report['symbol_concentration']
           },ensure_ascii=False))
           PY
       - name: Verify and extract 2017-2022 raw daily jump provenance (read only)
