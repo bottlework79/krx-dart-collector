@@ -45,6 +45,7 @@ jobs:
           set -euo pipefail
           python -m unittest validation.ml.test_kis_input_readiness -v
           python -m unittest validation.ml.test_unified_kis_key_audit -v
+          python -m unittest validation.ml.test_unified_kis_training -v
       - name: Audit staged 2010-2026 KIS and KRX adjustment factors
         working-directory: private
         env:
@@ -55,13 +56,20 @@ jobs:
           python -m analysis.ml.kis_input_readiness \
             --start-year "$START_YEAR" --end-year "$END_YEAR" \
             --output-dir data/ml/kis_input_readiness_v1
+      - name: Verify KIS adjusted source for unified ML (no model fit)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.unified_kis_training \\
+            --mode audit --max-codes 80 \\
+            --output-dir data/ml/research/audits
       - name: Save offline audit report in private repository only
         working-directory: private
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- data/ml/kis_input_readiness_v1/
+          git add -- data/ml/kis_input_readiness_v1/ data/ml/research/audits/
           if git diff --cached --quiet; then
             echo KIS_ML_AUDIT_UNCHANGED=true
           else
