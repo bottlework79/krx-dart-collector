@@ -44,6 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest validation.ml.test_kis_input_readiness -v
+          python -m unittest validation.ml.test_unified_kis_key_audit -v
       - name: Audit staged 2010-2026 KIS and KRX adjustment factors
         working-directory: private
         env:
