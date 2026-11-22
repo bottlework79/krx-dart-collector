@@ -123,6 +123,11 @@ jobs:
               assert reason_rates[reason]['total_excluded']==n
               assert sum(row['excluded_rows'] for row in reason_rates[reason]['symbols'])==n
           print('V2_EXCLUSION_2020_REASON_RATES='+json.dumps(reason_rates,ensure_ascii=False))
+          coverage=report['cohort_2020_coverage']
+          assert coverage['cohort_symbols']==80
+          assert coverage['symbols_with_2020_sampled_rows']<=coverage['symbols_with_2020_raw_rows']<=80
+          assert len(coverage['symbols_without_2020_raw_rows'])+coverage['symbols_with_2020_raw_rows']==80
+          print('V2_2020_COHORT_COVERAGE='+json.dumps(coverage,ensure_ascii=False))
           print('V2_EXCLUSION_2020_SUMMARY='+json.dumps({
               'excluded_rows':len(rows),'reason_counts':dict(counts),
               'jump_past_rows':sum(r['past_jump_window'] for r in rows),
