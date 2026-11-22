@@ -116,6 +116,13 @@ jobs:
           assert rates['total_sampled']>=rates['total_excluded']
           assert sum(r['sampled_rows'] for r in rates['symbols'])==rates['total_sampled']
           print('V2_EXCLUSION_2020_DENOMINATOR_RATES='+json.dumps(rates,ensure_ascii=False))
+          reason_rates=report['reason_symbol_exclusion_rates']
+          assert set(reason_rates)==set(counts)
+          for reason,n in counts.items():
+              assert reason_rates[reason]['total_sampled']==rates['total_sampled']
+              assert reason_rates[reason]['total_excluded']==n
+              assert sum(row['excluded_rows'] for row in reason_rates[reason]['symbols'])==n
+          print('V2_EXCLUSION_2020_REASON_RATES='+json.dumps(reason_rates,ensure_ascii=False))
           print('V2_EXCLUSION_2020_SUMMARY='+json.dumps({
               'excluded_rows':len(rows),'reason_counts':dict(counts),
               'jump_past_rows':sum(r['past_jump_window'] for r in rows),
