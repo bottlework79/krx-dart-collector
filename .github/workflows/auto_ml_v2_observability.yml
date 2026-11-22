@@ -108,6 +108,9 @@ jobs:
           assert len({(r['code'],r['date']) for r in rows})==len(rows)
           counts=Counter(reason for r in rows for reason in r['reasons'])
           assert dict(counts)==report['reason_counts']
+          assert set(report['reason_symbol_concentration'])==set(counts)
+          assert all(report['reason_symbol_concentration'][k]['excluded_rows']==v for k,v in counts.items())
+          print('V2_EXCLUSION_2020_REASON_CONCENTRATION='+json.dumps(report['reason_symbol_concentration'],ensure_ascii=False))
           print('V2_EXCLUSION_2020_SUMMARY='+json.dumps({
               'excluded_rows':len(rows),'reason_counts':dict(counts),
               'jump_past_rows':sum(r['past_jump_window'] for r in rows),
