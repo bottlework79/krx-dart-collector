@@ -2,9 +2,8 @@ name: Research ML - Immediate Bounded Experiment Chain (KRX Only)
 
 on:
   workflow_dispatch:
-  # Backup start/check only; after each success the next run dispatches immediately.
-  schedule:
-    - cron: '30 0 * * 1,3,5'
+  # Historic KRX-only finite research queue: manual reproduction only.
+  # Scheduled automatic refits have moved to unified_kis_auto_retrain.yml.
 
 permissions:
   contents: read
