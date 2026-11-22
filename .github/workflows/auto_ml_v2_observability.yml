@@ -157,6 +157,25 @@ jobs:
           import json
           print('V2_RAW_JUMP_EVENTS='+json.dumps(report['raw_daily_jump_events'],ensure_ascii=False))
           PY
+      - name: Crosswalk 2020 excluded rows and dated zero-volume observations (read only)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_v2_2020_exclusion_zero_crosswalk -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from analysis.ml.v2_2020_exclusion_zero_crosswalk import crosswalk
+          excluded=json.loads(Path('/tmp/v2_2020_exclusion_rows.json').read_text())
+          events=json.loads(Path('/tmp/v2_2020_event_queue.json').read_text())
+          result=crosswalk(excluded,events)
+          assert not result['official_verified']
+          assert not result['training_approved']
+          assert not result['point_in_time_verified']
+          assert not result['tradable_strategy_approved']
+          Path('/tmp/v2_2020_exclusion_zero_crosswalk.json').write_text(json.dumps(result,indent=2))
+          print('V2_2020_EXCLUSION_ZERO_VOLUME_CROSSWALK='+json.dumps(result))
+          PY
       - name: Upload read-only diagnostic artifact
         uses: actions/upload-artifact@v4
         with:
@@ -165,6 +184,7 @@ jobs:
             /tmp/v2_observability_audit.json
             /tmp/v2_2020_event_queue.json
             /tmp/v2_2020_exclusion_rows.json
+            /tmp/v2_2020_exclusion_zero_crosswalk.json
             /tmp/v2_raw_jump_provenance.json
           if-no-files-found: error
           retention-days: 14
