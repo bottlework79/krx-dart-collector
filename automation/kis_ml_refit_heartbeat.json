@@ -1,8 +1,5 @@
 {
-  "version": 1,
-  "purpose": "hourly-unified-ml-research-fallback-for-kis-price-refit",
-  "hour_utc": "2026-11-23T09",
-  "emitted_at_utc": "2026-11-23T09:04:43.525Z",
-  "source": "hourly-unified-ml-research",
-  "private_model_or_prices_included": false
+  "hour_utc": "2026-11-23T10",
+  "emitted_at_utc": "2026-11-23T10:03:27Z",
+  "source": "hourly-unified-ml-research"
 }
