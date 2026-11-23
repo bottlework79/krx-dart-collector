@@ -2,9 +2,10 @@ name: Unified ML - KIS Adjusted Price Automatic Research Refit
 
 on:
   workflow_dispatch:
-  # After KIS adjusted-price daily sync (18:30 KST); 22:30 KST, weekdays.
+  # Hourly at :25 KST, following unified ChatGPT research at :05.
+  # GitHub schedule may be delayed; concurrency serializes overlapping runs.
   schedule:
-    - cron: '30 13 * * 1-5'
+    - cron: '25 * * * *'
 
 permissions:
   contents: read
@@ -40,7 +41,7 @@ jobs:
             validation.ml.test_unified_kis_key_audit \
             validation.ml.test_unified_kis_training \
             validation.ml.test_unified_kis_auto_retrain -v
-      - name: Automatically refit only if KIS historical input changed
+      - name: Check every hour and refit when KIS research inputs change
         working-directory: private
         run: |
           set -euo pipefail
