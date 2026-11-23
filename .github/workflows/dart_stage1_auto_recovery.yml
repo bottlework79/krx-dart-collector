@@ -1,0 +1,81 @@
+name: DART Stage 1 - Auto Resume After Outage
+
+on:
+  schedule:
+    # GitHub schedules run in UTC and may be delayed under heavy load.
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/dart_stage1_auto_recovery.yml
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dart-stage1-recovery-gate
+  cancel-in-progress: false
+
+jobs:
+  guarded-resume:
+    # The single initial bootstrap push is explicitly tagged. Later changes
+    # do not automatically launch a collection outside the scheduled gate.
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[DART_RECOVERY_BOOTSTRAP]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout private DART data and checkpoint history
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify recovery gate offline
+        working-directory: private
+        run: python -m unittest validation.financials.test_stage1_recovery
+
+      - name: Review last DART runs and persisted stage 1 failure
+        id: gate
+        working-directory: private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Check active/queued runs before dispatch; the actual collector
+          # additionally serializes all private DB writes.
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow dart_collect.yml \
+            --limit 30 --json databaseId,status,createdAt,conclusion \
+            > "$RUNNER_TEMP/dart_stage1_runs.json"
+          python -m analysis.financials.stage1_recovery \
+            --runs-file "$RUNNER_TEMP/dart_stage1_runs.json" \
+            --output-file "$RUNNER_TEMP/dart_stage1_recovery.json"
+          python - "$RUNNER_TEMP/dart_stage1_recovery.json" "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          decision = json.load(open(sys.argv[1], encoding="utf-8"))
+          with open(sys.argv[2], "a", encoding="utf-8") as output:
+              output.write("should_resume=" + str(decision["should_resume"]).lower() + "\n")
+              if decision["should_resume"]:
+                  output.write("year=" + str(decision["year"]) + "\n")
+                  output.write("report=" + decision["report"] + "\n")
+          PY
+
+      - name: Resume failed DART reporting period from saved checkpoints
+        if: ${{ steps.gate.outputs.should_resume == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YEAR: ${{ steps.gate.outputs.year }}
+          REPORT: ${{ steps.gate.outputs.report }}
+        run: |
+          set -euo pipefail
+          gh workflow run dart_collect.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f stock_code= -f year="$YEAR" -f report="$REPORT" \
+            -f max_stocks= -f force_refresh=false -f continue_periods=true
+          echo "DART_STAGE1_RECOVERY_DISPATCHED year=$YEAR report=$REPORT continue_periods=true"
