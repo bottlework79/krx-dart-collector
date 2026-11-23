@@ -62,6 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m analysis.ml.kis_chatgpt_payload
+          test -s data/ml/kis_chatgpt_bridge_v1/direct_python_q8.json
       - name: Persist PRIVATE research bridge artifacts without raw OHLCV export
         working-directory: private
         run: |
