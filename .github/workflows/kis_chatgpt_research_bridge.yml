@@ -57,6 +57,11 @@ jobs:
           set -euo pipefail
           python -m analysis.ml.kis_chatgpt_research_bridge \
             --max-codes 80 --max-rows-per-year 5000 --pilot-rows-per-year 24 --chunk-rows 180
+      - name: Build compressed text dataset for direct GPT Python transport
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_chatgpt_payload
       - name: Persist PRIVATE research bridge artifacts without raw OHLCV export
         working-directory: private
         run: |
