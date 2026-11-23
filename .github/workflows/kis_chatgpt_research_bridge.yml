@@ -65,6 +65,54 @@ jobs:
           test -s data/ml/kis_chatgpt_bridge_v1/direct_python_q8.json
           test -s data/ml/kis_chatgpt_bridge_v1/direct_python_q8_gzip.json
           test -s data/ml/kis_chatgpt_bridge_v1/direct_float16_manifest.json
+      - name: Run one NEW pre-registered KIS research hypothesis (GitHub fallback)
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest validation.ml.test_gpt_python_novelty_research -v
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+          root = Path('data/ml/kis_chatgpt_bridge_v1')
+          q = json.loads((root / 'novelty/queue.json').read_text(encoding='utf-8'))
+          source = json.loads((root / 'direct_python_payload.json').read_text(encoding='utf-8'))
+          if q['source'] != source['source'] or source['sealed_2023_read'] is not False:
+              raise RuntimeError('KIS-only research provenance mismatch')
+          digest = source['transport_sha256'][:16]
+          folder = root / 'novelty' / 'github'
+          folder.mkdir(parents=True, exist_ok=True)
+          for hypothesis in q['hypotheses']:
+              outfile = folder / f'{digest}_{hypothesis}.json'
+              if outfile.exists():
+                  continue
+              subprocess.run([
+                  sys.executable, '-m', 'analysis.ml.gpt_python_novelty_research',
+                  '--data', str(root / 'direct_python_payload.json'),
+                  '--hypothesis', hypothesis,
+                  '--environment', 'github_actions_python',
+                  '--output', str(outfile),
+              ], check=True)
+              output = json.loads(outfile.read_text(encoding='utf-8'))
+              assert output['hypothesis_id'] == hypothesis
+              assert output['sample_count'] == source['rows']
+              assert output['independent_improvement_verified'] is False
+              assert output['model_auto_promotion_allowed'] is False
+              print('KIS_NOVEL_RESEARCH_NEW=' + json.dumps({
+                  'hypothesis': hypothesis,
+                  'paired_ap_delta': output['paired_difference']['mean_ap_lift'],
+                  'ap_win_years': output['candidate_better_ap_in_folds'],
+                  'environment': 'github_actions_python',
+                  'source_digest': digest,
+              }), flush=True)
+              break
+          else:
+              print('KIS_NOVEL_RESEARCH_QUEUE_EXHAUSTED=' + json.dumps({
+                  'hypotheses': len(q['hypotheses']), 'source_digest': digest,
+                  'independent_improvement_verified': False
+              }), flush=True)
+          PY
       - name: Persist PRIVATE research bridge artifacts without raw OHLCV export
         working-directory: private
         run: |
