@@ -65,16 +65,6 @@ jobs:
           test -s data/ml/kis_chatgpt_bridge_v1/direct_python_q8.json
           test -s data/ml/kis_chatgpt_bridge_v1/direct_python_q8_gzip.json
           test -s data/ml/kis_chatgpt_bridge_v1/direct_float16_manifest.json
-      - name: Write connector artifact handoff probe (NON-SENSITIVE)
-        run: |
-          printf 'GPT connector artifact transfer probe 2026-11-23 - no stock data\n' > transport_probe.txt
-      - name: Upload NON-SENSITIVE GitHub-to-ChatGPT artifact probe
-        uses: actions/upload-artifact@v4
-        with:
-          name: gpt-connector-transfer-probe
-          path: transport_probe.txt
-          if-no-files-found: error
-          retention-days: 1
       - name: Persist PRIVATE research bridge artifacts without raw OHLCV export
         working-directory: private
         run: |
