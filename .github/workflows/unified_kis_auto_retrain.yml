@@ -2,6 +2,12 @@ name: 통합 머신러닝 - KIS주가 자동 재학습
 
 on:
   workflow_dispatch:
+  # Bootstrap and revalidate the workflow immediately when this workflow file changes.
+  # Scope is limited to this one file to avoid repeated runs from data commits.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unified_kis_auto_retrain.yml'
   # Hourly at :25 KST, following unified ChatGPT research at :05.
   # GitHub schedule may be delayed; concurrency serializes overlapping runs.
   schedule:
