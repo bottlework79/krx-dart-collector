@@ -1,0 +1,81 @@
+name: KIS주가 ChatGPT 직접 연구 데이터 준비
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_chatgpt_research_bridge.yml'
+  # The previous hour's job prepares data before ChatGPT's :05.
+  schedule:
+    - cron: '45 * * * *'
+  # The hourly ChatGPT heartbeat runs the existing refit, which also
+  # re-triggers this export even when the GitHub cron is missed.
+  workflow_run:
+    workflows: ['통합 머신러닝 - KIS주가 자동 재학습']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kis-chatgpt-research-bridge-single-writer
+  cancel-in-progress: false
+
+jobs:
+  prepare-private-kis-research-samples:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PRIVATE KIS prices and ML sources
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline scientific research dependencies
+        run: python -m pip install pandas numpy scikit-learn joblib requests cryptography
+      - name: Regression-test KIS bridge and KIS-only loader
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            validation.ml.test_kis_chatgpt_research_bridge \
+            validation.ml.test_unified_kis_key_audit \
+            validation.ml.test_unified_kis_training -v
+      - name: Generate bounded KIS-only ChatGPT-readable research JSON before next hour
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_chatgpt_research_bridge \
+            --max-codes 80 --max-rows-per-year 160 --pilot-rows-per-year 24
+      - name: Persist PRIVATE research bridge artifacts without raw OHLCV export
+        working-directory: private
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/kis_chatgpt_bridge_v1/
+          if git diff --cached --quiet; then
+            echo KIS_CHATGPT_BRIDGE_UNCHANGED=true
+          else
+            git commit -m 'Prepare KIS research-only JSON samples for direct ChatGPT experiments' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::KIS_CHATGPT_BRIDGE_PRIVATE_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo KIS_CHATGPT_BRIDGE_PRIVATE_SAVED=true
+          fi
+
+# KIS prices only; KRX is exact key reference; 2023 sealed; no trading.
