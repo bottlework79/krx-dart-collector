@@ -1,0 +1,92 @@
+name: KIS주가 2010 순차학습 독립 연구
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_sequential_2010_research.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kis-2010-chronological-research
+  cancel-in-progress: false
+
+jobs:
+  verify-and-fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PRIVATE KIS historical prices and research code
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          path: private
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          persist-credentials: true
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install research-only model dependencies
+        run: python -m pip install numpy pandas scikit-learn requests cryptography joblib
+
+      - name: Validate 2010 chronological splits and frozen bridge defaults
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            validation.ml.test_kis_sequential_2010_research \
+            validation.ml.test_kis_chatgpt_research_bridge \
+            -v
+
+      - name: Run distinct 2010-2022 KIS chronological expanding research
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_sequential_2010_research \
+            --max-codes 80 \
+            --output data/ml/kis_sequential_2010_v1/latest.json
+
+      - name: Save PRIVATE research-only result, no raw prices
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('data/ml/kis_sequential_2010_v1/latest.json')
+          d = json.loads(p.read_text())
+          assert d['source'] == 'KIS주가'
+          assert d['train_start_year'] == 2010
+          assert d['sealed_2023_read'] is False
+          assert d['training_approved'] is False
+          assert d['point_in_time_verified'] is False
+          assert 2023 not in d['test_years_evaluated']
+          assert d['test_years_evaluated']
+          print('KIS_2010_COMMIT_GATE=ok')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/ml/kis_sequential_2010_v1/latest.json
+          if git diff --cached --quiet; then
+            echo KIS_2010_UNCHANGED=true
+          else
+            git commit -m 'Record 2010-start KIS expanding walk-forward research-only metrics' >/dev/null
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo '::error::KIS_2010_REBASE_FAILED'
+              exit 1
+            fi
+            git push origin HEAD:main
+            echo KIS_2010_SAVED=true
+          fi
+
+# 2023 sealed, current historical KIS adjusted-price PIT unverified.
+# This research is NOT model approval, trading or final external validation.
