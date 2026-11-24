@@ -61,3 +61,39 @@ jobs:
           assert (root / "v2-cache/_checkpoints/bucket-0.json").is_file()
           print("Resume checkpoint assertions passed")
           PY
+
+      - name: Verify interrupted bucket recovery and identity rejection
+        working-directory: private
+        run: |
+          python - <<'PY'
+          import os, json
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "v2-cache"
+          marker = root / "_checkpoints/bucket-0.json"
+          marker.unlink()
+          folder = next(root.glob("stride=*/year=*/bucket=0"))
+          (folder / "interrupted.parquet").write_bytes(b"incomplete")
+          PY
+          python -m analysis.ml.kis_full_universe_v2_cache --output "${RUNNER_TEMP}/v2-cache" --buckets 128 --smoke --resume
+          python - <<'PY'
+          import os, json
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          cache = root / "v2-cache"
+          before = json.loads((root / "before.json").read_text())
+          after = json.loads((cache / "manifest.json").read_text())
+          assert before["counts"] == after["counts"]
+          assert before["quality"] == after["quality"]
+          assert not list(cache.rglob("interrupted.parquet"))
+          identity = cache / "_checkpoints/identity.json"
+          data = json.loads(identity.read_text())
+          data["sources"]["trend.py"] = "deliberately-invalid"
+          identity.write_text(json.dumps(data))
+          print("Interrupted bucket recovery assertions passed")
+          PY
+          if python -m analysis.ml.kis_full_universe_v2_cache --output "${RUNNER_TEMP}/v2-cache" --buckets 128 --smoke --resume > "${RUNNER_TEMP}/identity-test.log" 2>&1; then
+            echo "Unexpected successful resume with invalid identity"
+            exit 1
+          fi
+          grep -F "Resume input or source fingerprint mismatch" "${RUNNER_TEMP}/identity-test.log"
+          echo "Identity rejection assertion passed"
