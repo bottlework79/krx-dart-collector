@@ -1,4 +1,4 @@
-name: Test DART Financial Inputs Stage 2 - 2015 Batch
+name: Retest DART Stage 2 - Year Scoped
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
   dispatch-first-batch:
     # A tagged commit initializes Stage 2 exactly once. Manual workflow_dispatch
     # remains available as an explicit operator action.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[RETRY_DART_STAGE2_SMOKE_2015]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[RETRY_DART_STAGE2_YEAR_SCOPED]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
