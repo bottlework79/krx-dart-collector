@@ -1,0 +1,54 @@
+name: KIS v2 private storage transport test
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_full_universe_v2_private_storage_test.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kis-v2-private-storage-test
+  cancel-in-progress: false
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - name: Persist synthetic checkpoint to isolated private branch
+        working-directory: private
+        run: |
+          set -euo pipefail
+          branch="kis-v2-storage-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch --orphan "$branch"
+          git config user.name "KIS v2 storage test"
+          git config user.email "actions@users.noreply.github.com"
+          mkdir -p checkpoint
+          printf '%s\n' 'synthetic checkpoint only' > checkpoint/probe.txt
+          sha256sum checkpoint/probe.txt > checkpoint/SHA256SUMS
+          git add -- checkpoint
+          git commit -m "Synthetic storage transport probe"
+          git push origin "HEAD:refs/heads/$branch"
+  read:
+    needs: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: kis-v2-storage-test-${{ github.run_id }}-${{ github.run_attempt }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - name: Verify persisted checkpoint on fresh runner
+        working-directory: private
+        run: |
+          set -euo pipefail
+          sha256sum -c checkpoint/SHA256SUMS
+          test "$(cat checkpoint/probe.txt)" = "synthetic checkpoint only"
+          echo "Private cross-runner storage transport passed"
