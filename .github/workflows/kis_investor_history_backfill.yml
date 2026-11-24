@@ -21,7 +21,7 @@ on:
         type: number
         default: 100
         required: true
-        description: "1..100 historical KRX stock-years per batch"
+        description: "1..100 historical KIS price stock-years per batch"
       codes:
         type: string
         default: ''
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Checkout private KRX as-of universe and secured token checkpoint
+      - name: Checkout private KIS price universe and secured token checkpoint
         id: checkout
         uses: actions/checkout@v4
         with:
@@ -115,7 +115,7 @@ jobs:
             exit 1
           fi
           if [ "$mode" = auto ] && [ -n "$codes" ]; then
-            echo "::error::Auto always follows KRX historical manifest; codes must be blank"
+            echo "::error::Auto always follows saved KIS price history; codes must be blank"
             exit 1
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
@@ -190,7 +190,7 @@ jobs:
             fi
             echo "INVESTOR_HISTORY_PRIVATE_CHECKPOINT_SAVED=true"
           fi
-      - name: Verify private same-run checkpoint and decide next eligible KRX year
+      - name: Verify private same-run checkpoint and decide next eligible KIS price year
         id: next
         if: success() && steps.collect.outputs.mode == 'auto' && github.run_attempt == 1
         working-directory: private
@@ -212,6 +212,6 @@ jobs:
           echo INVESTOR_HISTORY_NEXT_RUN_REQUESTED=true
 
 # Fail closed: token/API errors, non-progress, bad quality, failed PRIVATE push,
-# missing historical KRX source, or failed dispatch halt the immediate chain.
+# missing historical KIS price source, or failed dispatch halt the immediate chain.
 # Daily schedule is a recovery check for eligible work after error/cooldown.
 # No KIS balance/order endpoints; no ML training approval.
