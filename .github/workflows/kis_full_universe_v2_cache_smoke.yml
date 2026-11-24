@@ -1,0 +1,47 @@
+name: KIS v2 cache smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_full_universe_v2_cache_smoke.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kis-v2-cache-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas pyarrow scikit-learn requests cryptography joblib
+      - working-directory: private
+        run: python -m analysis.ml.kis_full_universe_v2_cache --output "${RUNNER_TEMP}/v2-cache" --buckets 128 --smoke
+      - name: Verify private cache locally
+        working-directory: private
+        run: |
+          python - <<'PY'
+          import os, json
+          from pathlib import Path
+          import pandas as pd
+          root = Path(os.environ["RUNNER_TEMP"]) / "v2-cache"
+          m = json.loads((root / "manifest.json").read_text())
+          assert m["smoke"] and not m["sealed_2025_read"]
+          for stride in (1,5,10,20):
+              files = list((root / f"stride={stride}").rglob("*.parquet"))
+              assert files, stride
+              df = pd.concat([pd.read_parquet(p) for p in files])
+              assert not df.duplicated(["Code","Date"]).any()
+              assert df.future_date.dt.year.max() <= 2024
+              assert (df.future_date > df.Date).all()
+          print("Cache smoke assertions passed")
+          PY
