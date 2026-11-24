@@ -45,3 +45,19 @@ jobs:
               assert (df.future_date > df.Date).all()
           print("Cache smoke assertions passed")
           PY
+      - name: Verify checkpoint resume
+        working-directory: private
+        run: |
+          cp "${RUNNER_TEMP}/v2-cache/manifest.json" "${RUNNER_TEMP}/before.json"
+          python -m analysis.ml.kis_full_universe_v2_cache --output "${RUNNER_TEMP}/v2-cache" --buckets 128 --smoke --resume
+          python - <<'PY'
+          import os, json
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          before = json.loads((root / "before.json").read_text())
+          after = json.loads((root / "v2-cache/manifest.json").read_text())
+          assert before["counts"] == after["counts"]
+          assert before["quality"] == after["quality"]
+          assert (root / "v2-cache/_checkpoints/bucket-0.json").is_file()
+          print("Resume checkpoint assertions passed")
+          PY
