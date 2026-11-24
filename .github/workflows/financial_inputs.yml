@@ -6,7 +6,7 @@ on:
         description: '종목코드 6자리 (비우면 1차 DB 기준 배치)'
         required: false
         type: string
-        default: '007860'
+        default: ''
       batch_index:
         description: '2차 배치 번호 (0부터, 종목코드 공란일 때)'
         required: false
