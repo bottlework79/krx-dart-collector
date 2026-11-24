@@ -1,4 +1,4 @@
-name: Start DART Financial Inputs Stage 2 - Initial Batch
+name: Test DART Financial Inputs Stage 2 - 2015 Batch
 
 on:
   push:
@@ -18,11 +18,11 @@ jobs:
   dispatch-first-batch:
     # A tagged commit initializes Stage 2 exactly once. Manual workflow_dispatch
     # remains available as an explicit operator action.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[START_DART_STAGE2_2026]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[RETRY_DART_STAGE2_SMOKE_2015]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dispatch checkpointed Stage 2 (first two stocks, all fiscal years)
+      - name: Dispatch Stage 2 smoke (two stocks, 2015 only)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -30,5 +30,5 @@ jobs:
           gh workflow run financial_inputs.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f stock_code= -f batch_index=0 -f batch_size=2 \
             -f retry_incomplete_only=true \
-            -f start_year=2015 -f end_year=2026
-          echo "STAGE2_FIRST_BATCH_DISPATCHED batch_index=0 batch_size=2 years=2015..2026 retry_incomplete_only=true"
+            -f start_year=2015 -f end_year=2015
+          echo "STAGE2_FIRST_BATCH_DISPATCHED batch_index=0 batch_size=2 years=2015..2015 retry_incomplete_only=true"
