@@ -120,6 +120,11 @@ jobs:
           done
           args=(--record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
           if [[ -n "$STOCK_CODE" ]]; then args+=(--code "$STOCK_CODE"); fi
+          # Stage 2 batches operate on one year at a time. Re-scanning all
+          # twelve years just to record this batch wastes memory and runner time.
+          if [[ "$START_YEAR" == "$END_YEAR" ]]; then
+            args+=(--year "$START_YEAR")
+          fi
           python -m analysis.financials.processing_history "${args[@]}" || exit 1
           git add -- data/processing_history/ || exit 1
           if ! git diff --cached --quiet; then
