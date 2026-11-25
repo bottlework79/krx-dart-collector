@@ -1,0 +1,102 @@
+name: KIS v2 real private cache integration
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_full_universe_v2_real_storage_test.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kis-v2-real-storage-test
+  cancel-in-progress: false
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: main
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: storage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas pyarrow scikit-learn requests cryptography joblib
+      - name: Initialize isolated private checkpoint branch
+        working-directory: storage
+        run: |
+          git switch --orphan "kis-v2-cache-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name "KIS v2 integration"
+          git config user.email "actions@users.noreply.github.com"
+      - name: Build and persist real bucket
+        working-directory: private
+        run: |
+          python -m analysis.ml.kis_full_universe_v2_cache --output "${RUNNER_TEMP}/v2-cache" --buckets 32 --smoke --checkpoint-checkout "${GITHUB_WORKSPACE}/storage" --checkpoint-branch "kis-v2-cache-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" > "${RUNNER_TEMP}/private-build.log" 2>&1 || { echo "Private build failed"; exit 1; }
+  restore:
+    needs: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: kis-v2-cache-real-${{ github.run_id }}-${{ github.run_attempt }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: storage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas pyarrow
+      - name: Verify restored private checkpoint
+        working-directory: storage
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          import pandas as pd
+          root = Path("checkpoint")
+          m = json.loads((root / "manifest.json").read_text())
+          marker = json.loads((root / "_checkpoints/bucket-0.json").read_text())
+          assert m["smoke"] and m["buckets"] == 32 and not m["sealed_2025_read"]
+          assert m["counts"] == marker["counts"] and m["quality"] == marker["quality"]
+          assert (root / "_checkpoints/identity.json").is_file()
+          assert 0 < m["peak_rss_kib"] < 6 * 1024 * 1024
+          files = {str(p.relative_to(root)) for p in root.rglob("*.parquet")}
+          assert files and files == set(marker["files"])
+          seen = set()
+          totals = {}
+          for rel, digest in marker["files"].items():
+              p = root / rel
+              assert hashlib.sha256(p.read_bytes()).hexdigest() == digest
+              stride = int(rel.split("/")[0].split("=")[1])
+              year = int(rel.split("/")[1].split("=")[1])
+              df = pd.read_parquet(p, columns=["Code","Date","future_date","label"])
+              assert df.Date.dt.year.eq(year).all()
+              assert df.Date.dt.year.between(2010,2024).all()
+              assert df.future_date.dt.year.le(2024).all()
+              assert (df.future_date > df.Date).all()
+              for code, date in zip(df.Code, df.Date):
+                  key = (stride, str(code), date)
+                  assert key not in seen
+                  seen.add(key)
+              for code, part in df.groupby("Code"):
+                  key = (str(code), year, stride)
+                  n, pos = totals.get(key, (0,0))
+                  totals[key] = (n+len(part), pos+int(part.label.sum()))
+          expected = {}
+          for c in m["counts"]:
+              key = (c["code"], c["year"], c["stride"])
+              n, pos = expected.get(key, (0,0))
+              expected[key] = (n+c["rows"], pos+c["positives"])
+          assert totals == expected
+          assert {k[2] for k in totals} == {1,5,10,20}
+          print("Real private cache restore assertions passed")
+          PY
