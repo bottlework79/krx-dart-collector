@@ -1,0 +1,179 @@
+name: KIS주가 전체 종목 학습 캐시 생성
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_full_universe_v2_full_cache.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kis-v2-full-cache-v1
+  cancel-in-progress: false
+env:
+  PRIVATE_SOURCE_REF: '3b3967d12c00900780810beaaa7164b2079a0580'
+  CHECKPOINT_BRANCH: kis-v2-cache-full-v1
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout pinned private research snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: ${{ env.PRIVATE_SOURCE_REF }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+      - name: Checkout private storage transport
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: ${{ env.PRIVATE_SOURCE_REF }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: storage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas pyarrow scikit-learn requests cryptography joblib
+      - name: Initialize or restore dedicated checkpoint branch
+        working-directory: storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          git ls-remote --exit-code --heads origin "refs/heads/$CHECKPOINT_BRANCH" >/dev/null
+          rc=$?
+          set -e
+          if [ "$rc" = 0 ]; then
+            git fetch --depth=1 origin "refs/heads/$CHECKPOINT_BRANCH"
+            git switch -C "$CHECKPOINT_BRANCH" FETCH_HEAD
+            test -d checkpoint
+            cp -a checkpoint "$RUNNER_TEMP/v2-cache"
+            echo 'Restored private checkpoint.'
+          elif [ "$rc" = 2 ]; then
+            git switch --orphan "$CHECKPOINT_BRANCH"
+            echo 'Initialized private checkpoint.'
+          else
+            echo 'Private checkpoint lookup failed.'
+            exit "$rc"
+          fi
+          git config user.name "KIS full cache"
+          git config user.email "actions@users.noreply.github.com"
+      - name: Build all 32 code buckets with private checkpoints
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m analysis.ml.kis_full_universe_v2_cache \
+            --output "$RUNNER_TEMP/v2-cache" --buckets 32 --resume \
+            --checkpoint-checkout "$GITHUB_WORKSPACE/storage" \
+            --checkpoint-branch "$CHECKPOINT_BRANCH" \
+            > "$RUNNER_TEMP/private-build.log" 2>&1 || { echo 'Full cache failed; completed private checkpoints retained.'; exit 1; }
+          test -f "$RUNNER_TEMP/v2-cache/manifest.json"
+          echo 'Full cache build completed; fresh-runner verification follows.'
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Restore full private checkpoint on a fresh runner
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: ${{ env.CHECKPOINT_BRANCH }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: storage
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas pyarrow
+      - name: Verify all buckets, partitions, identity and totals
+        working-directory: storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/private-verify.log" 2>&1 || { echo 'Full private cache verification failed.'; exit 1; }
+          import hashlib
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+          import pandas as pd
+
+          root = Path("checkpoint")
+          m = json.loads((root / "manifest.json").read_text())
+          checkpoints = root / "_checkpoints"
+          identity = json.loads((checkpoints / "identity.json").read_text())
+          assert not m["smoke"] and m["buckets"] == 32 and not m["sealed_2025_read"]
+          assert identity["buckets"] == 32 and not identity["smoke"]
+          assert identity["reports"] == m["input_reports"]
+          assert [r["year"] for r in identity["reports"]] == list(range(2010, 2025))
+          assert all(len(h) == 64 for h in identity["sources"].values())
+          assert all(len(r[k]) == 64 for r in identity["reports"] for k in ("shard_sha256", "manifest_sha256"))
+          assert 0 < m["peak_rss_kib"] < 6 * 1024 * 1024
+          assert {p.name for p in checkpoints.glob("bucket-*.json")} == {f"bucket-{b}.json" for b in range(32)}
+          all_files, counts, quality = set(), [], []
+          years_strides, positives = Counter(), Counter()
+          codes = set()
+          for b in range(32):
+              marker = json.loads((checkpoints / f"bucket-{b}.json").read_text())
+              counts.extend(marker["counts"])
+              quality.extend(marker["quality"])
+              expected, actual, seen = Counter(), Counter(), set()
+              for c in marker["counts"]:
+                  key = (str(c["code"]), c["year"], c["stride"], "rows")
+                  expected[key] += c["rows"]
+                  expected[key[:-1] + ("positives",)] += c["positives"]
+              for rel, digest in marker["files"].items():
+                  assert rel not in all_files
+                  all_files.add(rel)
+                  p = root / rel
+                  assert p.is_file() and p.name == "partition.parquet"
+                  assert hashlib.sha256(p.read_bytes()).hexdigest() == digest
+                  s, y, bk, _ = Path(rel).parts
+                  stride, year, bucket = int(s.split("=")[1]), int(y.split("=")[1]), int(bk.split("=")[1])
+                  assert bucket == b and stride in (1, 5, 10, 20) and 2010 <= year <= 2024
+                  df = pd.read_parquet(p, columns=["Code", "Date", "future_date", "label"])
+                  assert not df.isna().any().any()
+                  assert df.Date.dt.year.eq(year).all() and df.future_date.dt.year.le(2024).all()
+                  assert df.future_date.gt(df.Date).all() and df.label.isin([0, 1]).all()
+                  assert not df.duplicated(["Code", "Date"]).any()
+                  for code, date in zip(df.Code, df.Date):
+                      code = str(code)
+                      assert int.from_bytes(hashlib.sha256(code.encode()).digest()[:4], "big") % 32 == b
+                      key = (stride, code, date)
+                      assert key not in seen
+                      seen.add(key)
+                  for code, part in df.groupby("Code"):
+                      code = str(code)
+                      codes.add(code)
+                      n, pos = len(part), int(part.label.sum())
+                      actual[(code, year, stride, "rows")] += n
+                      actual[(code, year, stride, "positives")] += pos
+                      years_strides[(year, stride)] += n
+                      positives[(year, stride)] += pos
+              assert actual == expected
+          assert counts == m["counts"] and quality == m["quality"]
+          assert all_files == {str(p.relative_to(root)) for p in root.rglob("*.parquet")}
+          assert {s for _, s in years_strides} == {1, 5, 10, 20}
+          assert all_files and codes
+          summary = {
+              "verified": True, "source_ref": os.environ["PRIVATE_SOURCE_REF"],
+              "sealed_2025_read": False, "point_in_time_verified": False,
+              "buckets": 32, "partition_count": len(all_files), "distinct_sample_codes": len(codes),
+              "input_rows": sum(r["included_rows"] for r in identity["reports"]),
+              "peak_rss_kib": m["peak_rss_kib"], "elapsed_seconds": m["elapsed_seconds"],
+              "year_stride_counts": [{"year": y, "stride": s, "rows": n, "positives": positives[(y,s)]}
+                                     for (y,s), n in sorted(years_strides.items())],
+          }
+          (root / "verification.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+          PY
+          git config user.name "KIS full cache"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- checkpoint/verification.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record full cache integrity verification' >/dev/null
+            git push origin "HEAD:refs/heads/$CHECKPOINT_BRANCH"
+          fi
+          echo 'Full private cache verification passed (32 buckets).'
