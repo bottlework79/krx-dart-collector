@@ -1,0 +1,28 @@
+name: KIS v2 legacy provenance test
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_v2_legacy_provenance_test.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: 7871b4d602b2f98e461a0a3ce5c68d2590d83c44
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          sparse-checkout: |
+            analysis/ml/kis_v2_legacy_provenance_check.py
+            data/ml/kis_chatgpt_bridge_v1/direct_experiments/20261123T11_chatgpt_python_artifact_22models_summary.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - working-directory: private
+        run: python analysis/ml/kis_v2_legacy_provenance_check.py
