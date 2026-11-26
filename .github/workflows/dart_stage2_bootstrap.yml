@@ -1,4 +1,4 @@
-name: DART Stage 2 - 2015 Batch 25
+name: DART Stage 2 - 2015 Batch 100
 
 on:
   push:
@@ -15,20 +15,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dispatch-first-batch:
-    # A tagged commit initializes Stage 2 exactly once. Manual workflow_dispatch
+  dispatch-pilot:
+    # A tagged commit launches the bounded Stage 2 pilot exactly once. Manual workflow_dispatch
     # remains available as an explicit operator action.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[START_DART_STAGE2_BATCH25_2015]') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[START_DART_STAGE2_BATCH100_2015]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Dispatch first production-sized Stage 2 batch (25 stocks, 2015)
+      - name: Dispatch four sequential Stage 2 batches (100 stocks, 2015)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh workflow run financial_inputs.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f stock_code= -f batch_index=0 -f batch_size=25 \
+            -f stock_code= -f batch_index=0 -f batch_size=25 -f batch_count=4 \
             -f retry_incomplete_only=true \
             -f start_year=2015 -f end_year=2015
-          echo "STAGE2_FIRST_BATCH_DISPATCHED batch_index=0 batch_size=25 years=2015..2015 retry_incomplete_only=true"
+          echo "STAGE2_PILOT_DISPATCHED batch_index=0 batch_size=25 batch_count=4 years=2015..2015 retry_incomplete_only=true"

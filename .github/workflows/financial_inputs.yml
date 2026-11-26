@@ -17,6 +17,11 @@ on:
         required: false
         type: number
         default: 2
+      batch_count:
+        description: '연속 처리할 2차 배치 수 (1~4)'
+        required: false
+        type: number
+        default: 1
       retry_incomplete_only:
         description: '동일한 1차 원천의 기존 검증 완료 자료 건너뛰기'
         required: false
@@ -40,7 +45,7 @@ concurrency:
 jobs:
   process:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: ${{ inputs.batch_count > 1 && 360 || 180 }}
     steps:
       - name: Checkout private repository
         uses: actions/checkout@v4
@@ -64,6 +69,7 @@ jobs:
           STOCK_CODE: ${{ inputs.stock_code }}
           BATCH_INDEX: ${{ inputs.batch_index }}
           BATCH_SIZE: ${{ inputs.batch_size }}
+          BATCH_COUNT: ${{ inputs.batch_count }}
           RETRY_INCOMPLETE_ONLY: ${{ inputs.retry_incomplete_only }}
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
@@ -81,6 +87,15 @@ jobs:
             echo "stock_code must be six digits or empty for a batch" >&2
             exit 1
           fi
+          BATCH_COUNT="${BATCH_COUNT:-1}"
+          if [[ ! "$BATCH_COUNT" =~ ^[0-9]+$ ]] || (( BATCH_COUNT < 1 || BATCH_COUNT > 4 )); then
+            echo "batch_count must be 1..4" >&2
+            exit 1
+          fi
+          if [[ -n "$STOCK_CODE" && "$BATCH_COUNT" != "1" ]]; then
+            echo "batch_count must be 1 for a single stock" >&2
+            exit 1
+          fi
           if [[ -z "$STOCK_CODE" ]]; then
             if [[ ! "$BATCH_INDEX" =~ ^[0-9]+$ || ! "$BATCH_SIZE" =~ ^[0-9]+$ ]] || (( BATCH_SIZE < 1 || BATCH_SIZE > 25 )); then
               echo "batch_index must be >=0 and batch_size must be 1..25" >&2
@@ -92,30 +107,39 @@ jobs:
           failed=0
           for (( y=10#$START_YEAR; y<=10#$END_YEAR; y++ )); do
             echo "::group::Financial inputs $y"
-            args=(--year "$y" --enrich-original)
-            if [[ -n "$STOCK_CODE" ]]; then
-              args+=(--code "$STOCK_CODE")
-            else
-              args+=(--batch-index "$BATCH_INDEX" --batch-size "$BATCH_SIZE")
-            fi
-            if [[ "$RETRY_INCOMPLETE_ONLY" == "true" ]]; then
-              args+=(--retry-incomplete-only)
-            fi
-            if python -m collectors.financial.collect_inputs "${args[@]}"; then
-              echo "STAGE2_YEAR_COMPLETE $y"
-            else
-              echo "::error::Stage 2 processing failed for year $y; completed records will be kept"
-              failed=1
-            fi
-            # Checkpoint EACH year, even if another period failed.
-            git add -- data/financial_inputs/ || exit 1
-            if ! git diff --cached --quiet; then
-              git commit -m "Update Stage 2 financial inputs ($y)" || exit 1
-              git fetch origin main || exit 1
-              git rebase origin/main || exit 1
-              git push origin HEAD:main || exit 1
-              echo "STAGE2_YEAR_CHECKPOINT $y"
-            fi
+            year_failed=0
+            for (( offset=0; offset<BATCH_COUNT; offset++ )); do
+              batch=0
+              if [[ -z "$STOCK_CODE" ]]; then batch=$(( 10#$BATCH_INDEX + offset )); fi
+              echo "STAGE2_BATCH_START year=$y batch_index=$batch batch_size=$BATCH_SIZE"
+              args=(--year "$y" --enrich-original)
+              if [[ -n "$STOCK_CODE" ]]; then
+                args+=(--code "$STOCK_CODE")
+              else
+                args+=(--batch-index "$batch" --batch-size "$BATCH_SIZE")
+              fi
+              if [[ "$RETRY_INCOMPLETE_ONLY" == "true" ]]; then
+                args+=(--retry-incomplete-only)
+              fi
+              if python -m collectors.financial.collect_inputs "${args[@]}"; then
+                echo "STAGE2_BATCH_COMPLETE year=$y batch_index=$batch"
+              else
+                echo "::error::Stage 2 processing failed for year $y batch $batch; completed records will be kept"
+                failed=1
+                year_failed=1
+              fi
+              # Checkpoint each batch, even if another period failed.
+              git add -- data/financial_inputs/ || exit 1
+              if ! git diff --cached --quiet; then
+                git commit -m "Update Stage 2 financial inputs ($y, batch $batch)" || exit 1
+                git fetch origin main || exit 1
+                git rebase origin/main || exit 1
+                git push origin HEAD:main || exit 1
+                echo "STAGE2_BATCH_CHECKPOINT year=$y batch_index=$batch"
+                echo "STAGE2_YEAR_CHECKPOINT $y"
+              fi
+            done
+            if (( year_failed == 0 )); then echo "STAGE2_YEAR_COMPLETE $y"; fi
             echo "::endgroup::"
           done
           args=(--record-stage stage2 --run-id "$GITHUB_RUN_ID" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
@@ -134,7 +158,7 @@ jobs:
             git push origin HEAD:main || exit 1
           fi
           if (( failed != 0 )); then
-            echo "::error::One or more Stage 2 years had errors; rerun the same batch with retry_incomplete_only=true"
+            echo "::error::One or more Stage 2 years had errors; rerun the same batch range with retry_incomplete_only=true"
             exit 1
           fi
           echo "STAGE2_ALL_YEARS_COMPLETE"
