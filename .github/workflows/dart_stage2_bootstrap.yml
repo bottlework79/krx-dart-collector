@@ -33,4 +33,4 @@ jobs:
             -f start_year=2015 -f end_year=2015
           echo "STAGE2_PILOT_DISPATCHED batch_index=0 batch_size=25 batch_count=4 years=2015..2015 retry_incomplete_only=true"
 
-# Repeat the bounded pilot after the latest Stage 2 extraction improvements.
+# Repeat the bounded pilot after sign-aware historical investing cash flow reconciliation.
