@@ -1,0 +1,108 @@
+name: KIS주가 기존 22개 모델 재현
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_v2_legacy_replay.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kis-v2-legacy-replay
+  cancel-in-progress: false
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Checkout exact original private payload and model source
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: 36a1cd5c83b462ce4a0ab4b397282bb9c511f3eb
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: private
+          sparse-checkout: |
+            analysis/ml/gpt_python_artifact_runner.py
+            data/ml/kis_chatgpt_bridge_v1/direct_python_payload.json
+            data/ml/kis_chatgpt_bridge_v1/direct_float16_manifest.json
+          sparse-checkout-cone-mode: false
+      - name: Checkout original reported results separately
+        uses: actions/checkout@v4
+        with:
+          repository: bottlework79/krx-stock-data
+          ref: 7871b4d602b2f98e461a0a3ce5c68d2590d83c44
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: reference
+          persist-credentials: false
+          sparse-checkout: |
+            data/ml/kis_chatgpt_bridge_v1/direct_experiments/20261123T11_chatgpt_python_artifact_22models_summary.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install all 22 legacy candidate dependencies
+        run: python -m pip install numpy scikit-learn xgboost lightgbm catboost
+      - name: Verify exact bytes and execute legacy tournament (research only)
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > "$RUNNER_TEMP/private-replay.log" 2>&1 || { echo 'Legacy replay failed; private details suppressed'; exit 1; }
+          import base64, gzip, hashlib, json, os, sys, importlib.metadata
+          from pathlib import Path
+          from analysis.ml.gpt_python_artifact_runner import fit_all, candidates, decode
+          root = Path("data/ml/kis_chatgpt_bridge_v1")
+          payload = root / "direct_python_payload.json"
+          historical = json.loads((Path("../reference") / root / "direct_experiments/20261123T11_chatgpt_python_artifact_22models_summary.json").read_text())
+          manifest = json.loads((root / "direct_float16_manifest.json").read_text())
+          d, x, y, yrs = decode(payload)
+          assert d["transport_sha256"] == historical["transport_sha256"]
+          assert d["source_manifest_sha256"] == historical["source_manifest_sha256"] == manifest["source_manifest_sha256"]
+          assert hashlib.sha256(gzip.decompress(base64.b64decode(d["gzip_base64"], validate=True))).hexdigest() == historical["transport_sha256"]
+          assert len(y) == 4379 and len(candidates()) == 22
+          out = Path(os.environ["RUNNER_TEMP"]) / "legacy-replay"
+          out.mkdir(exist_ok=True)
+          report = fit_all(payload, out / "report.json", "github_actions_legacy_reproduction")
+          assert report["successful_models"] == 22 and not report["failed_models"]
+          for model in report["results"].values():
+              assert {year: fold["validation_n"] for year, fold in model["folds"].items()} == historical["validation_counts"]
+          comparison = []
+          for old in historical["top_models"]:
+              name = old["name"]
+              actual = report["results"][name]
+              comparison.append({
+                  "name": name, "historical_mean_auc": old["mean_auc"], "replay_mean_auc": actual["mean_auc"],
+                  "auc_delta": round(actual["mean_auc"]-old["mean_auc"], 6),
+                  "historical_mean_ap_lift": old["mean_ap_lift"], "replay_mean_ap_lift": actual["mean_ap_lift"],
+                  "year_auc_deltas": {year: round(actual["folds"][year]["auc"]-auc, 6) for year, auc in old["year_auc"].items()},
+              })
+          result = {"payload_verified": True, "source_commit": "36a1cd5c83b462ce4a0ab4b397282bb9c511f3eb",
+                    "transport_sha256": d["transport_sha256"], "successful_models": 22,
+                    "legacy_comparison_only": True, "exact_prior_dependency_versions_verified": False,
+                    "exact_reproduction_claimed": False, "sealed_2025_read": False,
+                    "python": sys.version.split()[0],
+                    "versions": {p: importlib.metadata.version(p) for p in ("numpy","scikit-learn","xgboost","lightgbm","catboost")},
+                    "comparison": comparison}
+          (out/"verification.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+          PY
+          echo 'Legacy 22-model replay completed; private comparison saved.'
+      - name: Persist private result without publishing payload or model artifacts
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="kis-v2-legacy-replay-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$branch"
+          git config user.name 'KIS legacy replay'
+          git config user.email 'actions@users.noreply.github.com'
+          mkdir -p legacy_replay
+          cp "$RUNNER_TEMP/legacy-replay/report.json" "$RUNNER_TEMP/legacy-replay/verification.json" legacy_replay/
+          git add --sparse -- legacy_replay/report.json legacy_replay/verification.json
+          git commit -m 'Record isolated legacy 22-model comparison' >/dev/null
+          git push origin "HEAD:refs/heads/$branch"
+          echo 'Private legacy replay results committed.'
