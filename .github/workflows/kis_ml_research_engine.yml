@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/kis_ml_research_engine.yml'
+      - 'automation/kis_ml_engine_heartbeat.json'
   schedule:
     - cron: '20,50 * * * *'
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: kis-ml-research-engine-v1
   cancel-in-progress: false
@@ -110,3 +112,41 @@ jobs:
             > "$RUNNER_TEMP/research-engine.log" 2>&1 || { echo 'Research engine infrastructure error; committed private state is preserved.'; exit 1; }
           grep -E '^(LEGACY_VERIFIED_AND_DURABLY_SAVED|LEGACY_BLOCKED_NEEDS_RESEARCH_FIX|LEGACY_RETRY_OR_BLOCKER_SAVED|RESEARCH_UNIT_SAVED status=(success|resource_blocked|failed_terminal|retry_pending)|RESEARCH_RUN_SAVED units=[0-9]+|NO_NEW_UNIT complete=(True|False))$' "$RUNNER_TEMP/research-engine.log" || true
           echo 'Research engine iteration finished; private state is source of truth.'
+      - name: Confirm new durable private checkpoint and pending work
+        id: next
+        working-directory: storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          has_more = False
+          path = Path("engine/status.json")
+          if path.is_file():
+              s = json.loads(path.read_text())
+              new_checkpoint = str(s.get("run_id")) == os.environ["GITHUB_RUN_ID"]
+              has_more = (new_checkpoint and not s.get("complete") and
+                          (s.get("legacy") == "retry_pending" or
+                           (s.get("legacy") == "verified" and s.get("next") is not None)))
+              if has_more:
+                  head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+                  remote = subprocess.check_output(["git", "ls-remote", "origin", "refs/heads/"+os.environ["STATE_BRANCH"]], text=True).split()[0]
+                  assert head == remote, "Private checkpoint not on remote; refuse next dispatch"
+                  assert not subprocess.check_output(["git", "status", "--porcelain", "--", "engine"], text=True).strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("has_more="+str(has_more).lower()+"\n")
+          print("RESEARCH_MORE_WORK="+str(has_more).lower())
+          PY
+      - name: Dispatch next research iteration immediately
+        if: success() && github.run_attempt == 1 && steps.next.outputs.has_more == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run kis_ml_research_engine.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'RESEARCH_NEXT_RUN_REQUESTED=true'
+# The cron is a recovery check, not the primary progression mechanism.
+# A successful fresh private checkpoint with remaining work chains immediately.
+# Complete plan, terminal legacy blocker, or infrastructure failure stops chaining.
