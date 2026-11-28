@@ -53,7 +53,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install pinned ledger and regression dependencies
-        run: python -m pip install numpy==2.4.6 pandas==3.1.1 pyarrow==26.0.1 scikit-learn==1.9.1 scipy==1.17.1 joblib==1.16.0
+        run: python -m pip install numpy==2.4.6 pandas==3.1.1 pyarrow==26.0.1 scikit-learn==1.9.1 scipy==1.17.1 joblib==1.6.0
       - name: Test chronology, seal, ledger migration and retry
         run: python source/analysis/ml/kis_ml_research_engine.py selftest
       - name: Verify backup, migrate results and commit private state atomically
