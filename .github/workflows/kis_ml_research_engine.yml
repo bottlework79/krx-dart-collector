@@ -1,13 +1,8 @@
 name: 통합 머신러닝 - 자율 학습 및 검증 엔진
+# Temporarily paused for ML source cleanup (2026-11-28).
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/kis_ml_research_engine.yml'
-      - 'automation/kis_ml_engine_heartbeat.json'
-  schedule:
-    - cron: '20,50 * * * *'
+
 permissions:
   contents: read
   actions: write
@@ -22,6 +17,7 @@ env:
   NUMEXPR_NUM_THREADS: '2'
 jobs:
   learn:
+    if: ${{ false }} # Pause until cleanup is verified
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:

@@ -1,19 +1,8 @@
 name: KRX ML - Compare 2010 vs 2015 Training History
 
+# Temporarily paused for ML source cleanup (2026-11-28).
 on:
   workflow_dispatch:
-    inputs:
-      force_recheck:
-        description: '이미 비교 결과가 있어도 다시 비교 실행'
-        required: false
-        type: boolean
-        default: false
-  push:
-    paths:
-      - '.github/workflows/krx_history_2010_vs_2015_ml.yml'
-  schedule:
-    # Readiness check after the bounded 2010-2014 archive's scheduled batches.
-    - cron: '40 5 * * *'
 
 permissions:
   contents: read
@@ -24,6 +13,7 @@ concurrency:
 
 jobs:
   compare:
+    if: ${{ false }} # Pause until cleanup is verified
     runs-on: ubuntu-latest
     timeout-minutes: 175
     steps:

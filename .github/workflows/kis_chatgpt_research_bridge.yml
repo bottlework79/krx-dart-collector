@@ -1,20 +1,8 @@
 name: KIS주가 ChatGPT 직접 연구 데이터 준비
 
+# Temporarily paused for ML source cleanup (2026-11-28).
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/kis_chatgpt_research_bridge.yml'
-  # The previous hour's job prepares data before ChatGPT's :05.
-  schedule:
-    - cron: '45 * * * *'
-  # The hourly ChatGPT heartbeat runs the existing refit, which also
-  # re-triggers this export even when the GitHub cron is missed.
-  workflow_run:
-    workflows: ['통합 머신러닝 - KIS주가 자동 재학습']
-    types: [completed]
-    branches: [main]
 
 permissions:
   contents: read
@@ -25,7 +13,7 @@ concurrency:
 
 jobs:
   prepare-private-kis-research-samples:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: ${{ false }} # Pause until cleanup is verified
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

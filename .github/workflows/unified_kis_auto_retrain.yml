@@ -1,19 +1,8 @@
 name: 통합 머신러닝 - KIS주가 자동 재학습
 
+# Temporarily paused for ML source cleanup (2026-11-28).
 on:
   workflow_dispatch:
-  # Recovery heartbeat from the hourly unified-research automation.
-  # A heartbeat commit starts this job even when GitHub drops/delays a cron event.
-  # Scope push triggering strictly to this workflow and the heartbeat; never broad repo pushes.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/unified_kis_auto_retrain.yml'
-      - 'automation/kis_ml_refit_heartbeat.json'
-  # Hourly at :25 KST, following unified ChatGPT research at :05.
-  # GitHub schedule may be delayed; concurrency serializes overlapping runs.
-  schedule:
-    - cron: '25 * * * *'
 
 permissions:
   contents: read
@@ -24,6 +13,7 @@ concurrency:
 
 jobs:
   kis-research-refit:
+    if: ${{ false }} # Pause until cleanup is verified
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
