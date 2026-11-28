@@ -150,3 +150,5 @@ jobs:
 # The cron is a recovery check, not the primary progression mechanism.
 # A successful fresh private checkpoint with remaining work chains immediately.
 # Complete plan, terminal legacy blocker, or infrastructure failure stops chaining.
+
+# 2026-11-28: verify retained engine after archiving obsolete independent ML workflows.
