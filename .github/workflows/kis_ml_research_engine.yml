@@ -1,10 +1,13 @@
 name: 통합 머신러닝 - 자율 학습 및 검증 엔진
-# Temporarily paused for result-ledger migration.
+# Migration-only temporary execution. No scheduled training or self-dispatch.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kis_ml_research_engine.yml'
 permissions:
   contents: read
-  actions: write
 concurrency:
   group: kis-ml-research-engine-v1
   cancel-in-progress: false
@@ -15,133 +18,49 @@ env:
   MKL_NUM_THREADS: '2'
   NUMEXPR_NUM_THREADS: '2'
 jobs:
-  learn:
-    if: ${{ false }}
+  migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 20
     steps:
-      - name: Read private engine and research plan
+      - name: Checkout private engine and unchanged plan
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: main
+          ref: b54e7554379872f9c129b5dff0931848f2fc38fb
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           persist-credentials: false
           path: source
           sparse-checkout: |
             analysis/ml/kis_ml_research_engine.py
             docs/kis_ml_engine_plan.json
-            data/ml/kis_chatgpt_bridge_v1/direct_experiments/20261123T11_chatgpt_python_artifact_22models_summary.json
           sparse-checkout-cone-mode: false
-      - name: Checkout immutable original candidate code and payload
+      - name: Checkout private result branch only
         uses: actions/checkout@v4
         with:
           repository: bottlework79/krx-stock-data
-          ref: 36a1cd5c83b462ce4a0ab4b397282bb9c511f3eb
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          persist-credentials: false
-          path: legacy
-          sparse-checkout: |
-            analysis/ml/gpt_python_artifact_runner.py
-            data/ml/kis_chatgpt_bridge_v1/direct_python_payload.json
-            data/ml/kis_chatgpt_bridge_v1/direct_float16_manifest.json
-          sparse-checkout-cone-mode: false
-      - name: Checkout only the verified 2010-2024 private cache
-        uses: actions/checkout@v4
-        with:
-          repository: bottlework79/krx-stock-data
-          ref: 93fc27194e208843e60f513ce5079c15c918482b
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          persist-credentials: false
-          path: cache
-      - name: Prepare authenticated private result storage checkout
-        uses: actions/checkout@v4
-        with:
-          repository: bottlework79/krx-stock-data
-          ref: main
+          ref: kis-ml-engine-state-v1
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: storage
-          sparse-checkout: |
-            docs/kis_ml_engine_plan.json
-          sparse-checkout-cone-mode: false
-      - name: Initialize or restore result-only private branch
+          persist-credentials: true
+      - name: Verify current state checkout
         working-directory: storage
-        shell: bash
         run: |
           set -euo pipefail
-          set +e
-          git ls-remote --exit-code --heads origin "refs/heads/$STATE_BRANCH" >/dev/null
-          rc=$?
-          set -e
-          if [ "$rc" = 0 ]; then
-            git fetch --depth=1 origin "refs/heads/$STATE_BRANCH"
-            git switch -C "$STATE_BRANCH" FETCH_HEAD
-            git sparse-checkout disable
-            echo 'Resumed previously persisted private research state.'
-          elif [ "$rc" = 2 ]; then
-            git switch --orphan "$STATE_BRANCH"
-            git sparse-checkout disable
-            echo 'Initialized isolated result-only private state.'
-          else
-            echo 'Private state branch lookup failed.'
-            exit "$rc"
-          fi
           test "$(git branch --show-current)" = "$STATE_BRANCH"
           git config user.name 'KIS research engine'
           git config user.email 'actions@users.noreply.github.com'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install pinned comparison dependencies
-        run: python -m pip install numpy==2.4.6 pandas==3.1.1 pyarrow==26.0.1 scikit-learn==1.9.1 scipy==1.17.1 joblib==1.6.0 xgboost==3.2.0 lightgbm==4.7.0 catboost==1.2.10
-      - name: Test chronology, seal and task resume before learning
+      - name: Install pinned ledger and regression dependencies
+        run: python -m pip install numpy==2.4.6 pandas==3.1.1 pyarrow==26.0.1 scikit-learn==1.9.1 scipy==1.17.1 joblib==1.16.0
+      - name: Test chronology, seal, ledger migration and retry
         run: python source/analysis/ml/kis_ml_research_engine.py selftest
-      - name: Run and validate bounded pending experiments
+      - name: Verify backup, migrate results and commit private state atomically
         shell: bash
         run: |
           set -euo pipefail
-          python source/analysis/ml/kis_ml_research_engine.py run \
+          python source/analysis/ml/kis_ml_research_engine.py migrate \
             --plan source/docs/kis_ml_engine_plan.json \
-            --storage storage --cache cache --legacy legacy \
-            --reference source/data/ml/kis_chatgpt_bridge_v1/direct_experiments/20261123T11_chatgpt_python_artifact_22models_summary.json \
-            > "$RUNNER_TEMP/research-engine.log" 2>&1 || { echo 'Research engine infrastructure error; committed private state is preserved.'; exit 1; }
-          grep -E '^(LEGACY_VERIFIED_AND_DURABLY_SAVED|LEGACY_BLOCKED_NEEDS_RESEARCH_FIX|LEGACY_RETRY_OR_BLOCKER_SAVED|RESEARCH_UNIT_SAVED status=(success|resource_blocked|failed_terminal|retry_pending)|RESEARCH_RUN_SAVED units=[0-9]+|NO_NEW_UNIT complete=(True|False))$' "$RUNNER_TEMP/research-engine.log" || true
-          echo 'Research engine iteration finished; private state is source of truth.'
-      - name: Confirm new durable private checkpoint and pending work
-        id: next
-        working-directory: storage
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json, os, subprocess
-          from pathlib import Path
-          has_more = False
-          path = Path("engine/status.json")
-          if path.is_file():
-              s = json.loads(path.read_text())
-              new_checkpoint = str(s.get("run_id")) == os.environ["GITHUB_RUN_ID"]
-              has_more = (new_checkpoint and not s.get("complete") and
-                          (s.get("legacy") == "retry_pending" or
-                           (s.get("legacy") == "verified" and s.get("next") is not None)))
-              if has_more:
-                  head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-                  remote = subprocess.check_output(["git", "ls-remote", "origin", "refs/heads/"+os.environ["STATE_BRANCH"]], text=True).split()[0]
-                  assert head == remote, "Private checkpoint not on remote; refuse next dispatch"
-                  assert not subprocess.check_output(["git", "status", "--porcelain", "--", "engine"], text=True).strip()
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write("has_more="+str(has_more).lower()+"\n")
-          print("RESEARCH_MORE_WORK="+str(has_more).lower())
-          PY
-      - name: Dispatch next research iteration immediately
-        if: success() && github.run_attempt == 1 && steps.next.outputs.has_more == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh workflow run kis_ml_research_engine.yml --repo "$GITHUB_REPOSITORY" --ref main
-          echo 'RESEARCH_NEXT_RUN_REQUESTED=true'
-# The cron is a recovery check, not the primary progression mechanism.
-# A successful fresh private checkpoint with remaining work chains immediately.
-# Complete plan, terminal legacy blocker, or infrastructure failure stops chaining.
+            --storage storage \
+            --backup-ref backup/pre-results-ledger-state-20261128
